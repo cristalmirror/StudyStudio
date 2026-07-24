@@ -1,0 +1,128 @@
+# ==========================================
+# Compiled files
+# ==========================================
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.pyc
+*.pyo
+
+# ==========================================
+# Build directories
+# ==========================================
+build/
+dist/
+out/
+bin/
+
+# ==========================================
+# Dependencies
+# ==========================================
+*.d
+.deps/
+
+# ==========================================
+# Emacs
+# ==========================================
+# Backup files
+*~
+\#*\#
+.\#*
+
+# Auto-save files
+\#*
+
+# Desktop files
+.emacs.desktop
+.emacs.desktop.lock
+
+# Byte-compiled Emacs Lisp
+*.elc
+
+# Temporary files
+*tmp*
+*-autoloads.el
+
+# CEDET/Semantic
+semanticdb
+
+# Projectile
+.projectile
+
+# Directory locals
+.dir-locals.el
+
+# Tramp history
+tramp
+
+# ==========================================
+# Other editors (for collaborators)
+# ==========================================
+# Vim
+*.swp
+*.swo
+*~
+tags
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# CLion / IntelliJ
+.idea/
+cmake-build-*/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# OS generated files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# Docker
+# ==========================================
+# No se ignora el Dockerfile, pero sí posibles archivos temporales
+.dockerignore
+
+# ==========================================
+# Logs and temporary files
+# ==========================================
+*.log
+*.tmp
+*.temp
+sal.txt
+
+# ==========================================
+# Package managers
+# ==========================================
+node_modules/
+vendor/
+
+# ==========================================
+# IDE / Tools specific
+# ==========================================
+# CTags
+tags
+TAGS
+
+# GDB
+*.gdb-history
+
+# Valgrind
+vgcore.*
