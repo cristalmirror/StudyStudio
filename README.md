@@ -3,7 +3,7 @@
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
 [![Version](https://img.shields.io/badge/version-0.0.1-orange)](./CHANGELOG.md)
-[![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
 
