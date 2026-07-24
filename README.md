@@ -38,6 +38,7 @@ The project showcases:
 ---
 
 ## 📂 Project Structure
+``
 StudyStudio/
 ├── src/
 │ ├── main.c # Application entry point and callbacks
@@ -50,3 +51,4 @@ StudyStudio/
 ├── Dockerfile # Fedora 40 build environment
 ├── CHANGELOG.md # Version history
 └── README.md # This file
+``
