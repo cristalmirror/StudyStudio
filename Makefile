@@ -1,4 +1,4 @@
-NAME      := mi_app
+NAME      := studystudio-0.0.2
 SRC_DIR   := src
 BUILD_DIR := build
 

@@ -21,6 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.2] - 2026-07-26
+
+### Added
+- Dynamic button creation in `on_add_clicked`: each click on "Add Subject" now creates a new interactive button instead of a static label.
+- New callback function `on_materia_clicked` to handle clicks on dynamically created subject buttons.
+- Each subject button prints its label to the console when clicked.
+- Makefile now mounted as a Docker volume to avoid rebuilding the image when build rules change.
+
+### Changed
+- Renamed executable from `mi_app` to `studystudio` in the `Makefile` (`NAME := studystudio`).
+- Updated window title in `interface.ui` from "Agregador con XML" to **"StudyStudio 0.0.2"**.
+- Improved Docker workflow: `Makefile` is now bind-mounted, so changes to build rules are reflected immediately without `docker build`.
+
+
 ## [0.0.1] - 2026-07-24
 
 > [!WARNING]

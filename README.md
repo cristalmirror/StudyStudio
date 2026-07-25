@@ -37,6 +37,19 @@ The project showcases:
 
 ---
 
+## Compilation 
+
+``
+cd ~/StudyStudio
+
+docker run -it --rm \
+    -v $(pwd)/src:/usr/src/app/src \
+    -v $(pwd)/build:/usr/src/app/build \
+    -v $(pwd)/Makefile:/usr/src/app/Makefile \
+    mi_app_builder \
+    make all
+``
+
 ## 📂 Project Structure
 
 StudyStudio/
