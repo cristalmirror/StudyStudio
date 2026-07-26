@@ -39,7 +39,7 @@ The project showcases:
 
 ## Compilation 
 
-``
+```
 cd ~/StudyStudio
 
 docker run -it --rm \
@@ -48,7 +48,7 @@ docker run -it --rm \
     -v $(pwd)/Makefile:/usr/src/app/Makefile \
     mi_app_builder \
     make all
-``
+```
 
 ## 📂 Project Structure
 
