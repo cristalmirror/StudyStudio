@@ -59,18 +59,19 @@ docker run -it --rm \
 ```
 
 ## 📂 Project Structure
-
+```
 StudyStudio/
-#### ├── src/
-#### │ ├── main.c # Application entry point and callbacks
-#### │ └── materia.c # Additional module
-#### ├── build/
-#### │ ├── linux/ # Linux object files
-#### │ └── win64/ # Windows object files
-#### ├── interface.ui # GTK4 UI definition (XML)
-#### ├── docker build -t mi_app_builder .
-#### ├── Makefile # Build rules for both platforms
-#### ├── Dockerfile # Fedora 40 build environment
-#### ├── CHANGELOG.md # Version history
-#### └── README.md # This file
+├── src/
+│ ├── main.c # Application entry point and callbacks
+│ └── materia.c # Additional module
+├── build/
+│ ├── linux/ # Linux object files
+│ └── win64/ # Windows object files
+├── interface.ui # GTK4 UI definition (XML)
+├── resources.xml
+├── docker build -t mi_app_builder .
+├── Makefile # Build rules for both platforms
+├── Dockerfile # Fedora 40 build environment
+├── CHANGELOG.md # Version history
+└── README.md # This file
 
