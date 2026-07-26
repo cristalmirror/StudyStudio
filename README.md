@@ -42,12 +42,20 @@ The project showcases:
 ```
 cd ~/StudyStudio
 
+docker build -t mi_app_builder .
+
 docker run -it --rm \
     -v $(pwd)/src:/usr/src/app/src \
     -v $(pwd)/build:/usr/src/app/build \
     -v $(pwd)/Makefile:/usr/src/app/Makefile \
+    -v $(pwd)/resources.xml:/usr/src/app/resources.xml \
+    -v $(pwd)/interface.ui:/usr/src/app/interface.ui \
     mi_app_builder \
     make all
+
+# to run LINUX
+./build/studystudio-0.0.x_linux
+
 ```
 
 ## 📂 Project Structure
@@ -60,6 +68,7 @@ StudyStudio/
 #### │ ├── linux/ # Linux object files
 #### │ └── win64/ # Windows object files
 #### ├── interface.ui # GTK4 UI definition (XML)
+#### ├── docker build -t mi_app_builder .
 #### ├── Makefile # Build rules for both platforms
 #### ├── Dockerfile # Fedora 40 build environment
 #### ├── CHANGELOG.md # Version history

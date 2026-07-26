@@ -21,6 +21,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.3] - 2026-07-26
+
+### Added
+- **GLib GResources support**: Embedded `interface.ui` directly into the executable using `resources.xml` and `glib-compile-resources`.
+- Automated `Makefile` rules to generate `resources.c` and compile it into `resources.o` for both Linux and Windows targets.
+- Explicit dependency tracking in `Makefile` to ensure resources are generated before compilation starts.
+
+### Changed
+- Updated `src/main.c` to use `gtk_builder_new_from_resource("/org/studystudio/interface.ui")` instead of `gtk_builder_new_from_file()`.
+- Improved `Makefile` robustness by replacing variable-based resource rules with explicit file targets to prevent "No rule to make target" errors.
+- Executable naming convention now reflects the version (e.g., `studystudio-0.0.2_linux`).
+
+### Removed
+- Runtime dependency on the external `interface.ui` file. The binary is now truly self-contained regarding its UI layout.
+
+### Fixed
+- Build failure where `make` could not find the rule to create `build/linux/resources.o`.
+- Runtime crash (`Gtk-ERROR: failed to add UI from file`) caused by incorrectly passing a resource path to a file-loading function.
+- Tabulation issues in `Makefile` recipes that caused silent parsing failures in some environments.
+
+### Known Issues
+- Subject buttons only print to console; no persistent state or navigation yet.
+- Windows executable still requires manual DLL copying for distribution (static linking GTK4 remains highly complex).
+- No CSS styling for widgets.
+- No unit tests implemented.
+
 ## [0.0.2] - 2026-07-26
 
 ### Added

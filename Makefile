@@ -1,4 +1,4 @@
-NAME      := studystudio-0.0.2
+NAME      := studystudio-0.0.3
 SRC_DIR   := src
 BUILD_DIR := build
 
@@ -6,7 +6,6 @@ BUILD_DIR := build
 # 1. Compilación para Linux
 # ==========================================
 CC_LINUX  := gcc
-# Forzamos PKG_CONFIG_PATH vacío para que use las rutas por defecto de Linux
 GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4)
 GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4)
 
@@ -19,7 +18,6 @@ LDFLAGS_LINUX := $(GTK_LIBS_LINUX)
 CC_WIN64  := x86_64-w64-mingw32-gcc
 MINGW_PKG_PATH := /usr/x86_64-w64-mingw32/sys-root/mingw/lib/pkgconfig
 
-# Aquí SÍ usamos la ruta de MinGW, pero solo para esta variable
 GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk4)
 GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4)
 
@@ -30,8 +28,8 @@ LDFLAGS_WIN := $(GTK_LIBS_WIN) -mwindows -static-libgcc
 # Archivos fuente
 # ==========================================
 SRCS := $(wildcard $(SRC_DIR)/*.c)
-OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o)
-OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o)
+OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
+OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o) $(BUILD_DIR)/win64/resources.o
 
 # ==========================================
 # Reglas
@@ -43,8 +41,12 @@ all: linux win64
 setup:
 	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64
 
+# --- Generar resources.c ---
+resources.c: resources.xml interface.ui
+	glib-compile-resources --generate-source --target=$@ $<
+
 # --- Linux ---
-linux: setup $(BUILD_DIR)/$(NAME)_linux
+linux: setup resources.c $(BUILD_DIR)/$(NAME)_linux
 
 $(BUILD_DIR)/$(NAME)_linux: $(OBJS_LINUX)
 	$(CC_LINUX) $(OBJS_LINUX) -o $@ $(LDFLAGS_LINUX)
@@ -53,8 +55,11 @@ $(BUILD_DIR)/$(NAME)_linux: $(OBJS_LINUX)
 $(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
 
+$(BUILD_DIR)/linux/resources.o: resources.c
+	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
+
 # --- Windows ---
-win64: setup $(BUILD_DIR)/$(NAME)_win64.exe
+win64: setup resources.c $(BUILD_DIR)/$(NAME)_win64.exe
 
 $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 	$(CC_WIN64) $(OBJS_WIN64) -o $@ $(LDFLAGS_WIN)
@@ -63,7 +68,10 @@ $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 $(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
 
+$(BUILD_DIR)/win64/resources.o: resources.c
+	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
+
 # --- Limpieza ---
 clean:
-	rm -rf $(BUILD_DIR)
-	@echo "[✓] Carpeta build/ eliminada."
+	rm -rf $(BUILD_DIR) resources.c
+	@echo "[✓] Carpeta build/ y resources.c eliminados."

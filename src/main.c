@@ -45,7 +45,7 @@ static void activate(GtkApplication *app, gpointer user_data) {
     GtkBuilder *builder;
 
     // Load the XML archive
-    builder = gtk_builder_new_from_file("interface.ui");
+    builder = gtk_builder_new_from_resource("/org/studystudio/interface.ui");
 
     // extract the windgets using id defined
     window = GTK_WIDGET(gtk_builder_get_object(builder,"main_window"));
