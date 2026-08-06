@@ -2,7 +2,7 @@
 <interface>
   <requires lib="gtk" version="4.0"/>
   <object class="GtkApplicationWindow" id="main_window">
-    <property name="title">StudyStudio 0.0.3</property>
+    <property name="title">StudyStudio-0.0.4</property>
     <property name="default-width">300</property>
     <property name="default-height">400</property>
     <child>
@@ -14,8 +14,20 @@
         <property name="margin-top">10</property>
         <property name="margin-bottom">10</property>
         <child>
-          <object class="GtkButton" id="add_button">
-            <property name="label">➕ Agregar Elemento</property>
+          <object class="GtkBox" id="buttons_box">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">10</property>
+            <property name="homogeneous">true</property>
+            <child>
+              <object class="GtkButton" id="add_button">
+                <property name="label">➕ Agregar Elemento</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkButton" id="load_button">
+                <property name="label">📂 Cargar Materia</property>
+              </object>
+            </child>
           </object>
         </child>
         <child>

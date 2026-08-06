@@ -37,11 +37,24 @@ static void on_add_clicked(GtkButton *button, gpointer user_data) {
     gtk_box_append(GTK_BOX(state->destiny_content), new_subject);
 }
 
+/*load archive of subject*/
+
+static void on_load_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    AppState *state = (AppState *)user_data;
+
+    g_print("Cargar Materia (contador actual: %d)",state->counter);
+    /*
+      all here can open the archive using
+     */
+    
+}
+
 /*
   function of activate
 */
 static void activate(GtkApplication *app, gpointer user_data) {
-    GtkWidget *window, *add_button, *target_box;
+    GtkWidget *window, *add_button, *load_button, *target_box;
     GtkBuilder *builder;
 
     // Load the XML archive
@@ -49,7 +62,8 @@ static void activate(GtkApplication *app, gpointer user_data) {
 
     // extract the windgets using id defined
     window = GTK_WIDGET(gtk_builder_get_object(builder,"main_window"));
-    add_button= GTK_WIDGET(gtk_builder_get_object(builder,"add_button"));
+    add_button = GTK_WIDGET(gtk_builder_get_object(builder,"add_button"));
+    load_button =GTK_WIDGET(gtk_builder_get_object(builder,"load_button"));
     target_box = GTK_WIDGET(gtk_builder_get_object(builder,"target_box"));
 
     /*
@@ -62,7 +76,7 @@ static void activate(GtkApplication *app, gpointer user_data) {
     state->destiny_content = target_box;
     state->counter = 0;
     g_signal_connect(add_button, "clicked",G_CALLBACK(on_add_clicked), state);
-
+    g_signal_connect(load_button,"clicked",G_CALLBACK(on_load_clicked), state);
     // print and clean
     gtk_window_present(GTK_WINDOW(window));
     g_object_unref(builder);

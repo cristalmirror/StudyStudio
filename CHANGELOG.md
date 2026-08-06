@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User documentation and `README.md` improvements
 
 ---
+## [0.0.4] - 2026-08-06
+
+### Added
+- New **"📂 Load Subject"** button placed next to the "➕ Add Element" button.
+- `on_load_clicked()` callback function in `main.c` to handle the new button's click event.
+- Horizontal `GtkBox` (`buttons_box`) in `interface.ui` to arrange both buttons side by side.
+- Connected the `load_button` signal to its callback in the `activate()` function.
+
+### Changed
+- Reorganized the top layout in `interface.ui`: buttons are now grouped inside a horizontal `GtkBox` with `homogeneous` spacing.
+
 
 ## [0.0.3] - 2026-07-26
 
