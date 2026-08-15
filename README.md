@@ -10,7 +10,7 @@
 ---
 
 > [!WARNING]
-> **This project is in early development (v0.0.1).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
+> **This project is in early development (v0.0.5).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
 
 ---
 
@@ -64,10 +64,12 @@ docker run -it --rm \
 StudyStudio/
 ├── src/
 │ ├── main.c # Application entry point and callbacks
-│ └── materia.c # Additional module
+│ └── subject.c # Implementations 
 ├── build/
 │ ├── linux/ # Linux object files
 │ └── win64/ # Windows object files
+├──include
+│ └ subject.h #definitions subject manager
 ├── interface.ui # GTK4 UI definition (XML)
 ├── resources.xml
 ├── docker build -t mi_app_builder .
