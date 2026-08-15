@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include "../include/subject.h"
 
 /*this structure save the state of application*/
 typedef struct {
@@ -47,7 +48,11 @@ static void on_load_clicked(GtkButton *button, gpointer user_data) {
     /*
       all here can open the archive using
      */
-    
+    Subject *mat1 = new_subject(2);
+    if (mat1 != NULL) {
+        mat1->read_subject(mat1);
+        mat1->close_subject(mat1);
+    }
 }
 
 /*

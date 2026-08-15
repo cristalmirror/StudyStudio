@@ -1,5 +1,6 @@
-NAME      := studystudio-0.0.4
+NAME      := studystudio-0.0.5
 SRC_DIR   := src
+INCLUDE_DIR := include
 BUILD_DIR := build
 
 # ==========================================
@@ -9,7 +10,9 @@ CC_LINUX  := gcc
 GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4)
 GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4)
 
-CFLAGS_LINUX  := -Wall -Wextra -O2 $(GTK_CFLAGS_LINUX)
+INCLUDES := -I$(INCLUDE_DIR)
+
+CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
 LDFLAGS_LINUX := $(GTK_LIBS_LINUX)
 
 # ==========================================
@@ -21,13 +24,15 @@ MINGW_PKG_PATH := /usr/x86_64-w64-mingw32/sys-root/mingw/lib/pkgconfig
 GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk4)
 GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4)
 
-CFLAGS_WIN  := -Wall -Wextra -O2 $(GTK_CFLAGS_WIN)
+CFLAGS_WIN  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
 LDFLAGS_WIN := $(GTK_LIBS_WIN) -mwindows -static-libgcc
 
 # ==========================================
 # Archivos fuente
 # ==========================================
 SRCS := $(wildcard $(SRC_DIR)/*.c)
+HEADERS := $(wildcard $(INCLUDE_DIR)/.h)
+
 OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
 OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o) $(BUILD_DIR)/win64/resources.o
 
@@ -75,3 +80,4 @@ $(BUILD_DIR)/win64/resources.o: resources.c
 clean:
 	rm -rf $(BUILD_DIR) resources.c
 	@echo "[✓] Carpeta build/ y resources.c eliminados."
+

@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
 
+## [0.0.5] - 2026-08-15
+
+### Added
+- `include/subject.h` and `src/subject.c` has created to manager the subject archive
+
+### Changed 
+- Makefike has modify to can compile `include/subject.h` and `src/subject.c` 
+
+
 ---
 ## [0.0.4] - 2026-08-06
 
