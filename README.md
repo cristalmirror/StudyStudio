@@ -57,6 +57,9 @@ docker run -it --rm \
 # to run LINUX
 ./build/studystudio-0.0.x_linux
 
+#to run WINDOWS
+./build/studystudio-0.0.x_win64.exe
+
 ```
 
 ## 📂 Project Structure
