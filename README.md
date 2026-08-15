@@ -46,6 +46,7 @@ docker build -t mi_app_builder .
 
 docker run -it --rm \
     -v $(pwd)/src:/usr/src/app/src \
+    -v $(pwd)/src:/include:/usr/src/app/include \
     -v $(pwd)/build:/usr/src/app/build \
     -v $(pwd)/Makefile:/usr/src/app/Makefile \
     -v $(pwd)/resources.xml:/usr/src/app/resources.xml \
