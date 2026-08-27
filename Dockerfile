@@ -5,6 +5,8 @@ FROM fedora:40
 RUN dnf install -y \
     # --- Herramientas básicas ---
     gcc gcc-c++ make git \
+    # --- Librerías LMZA para linux --
+    xz-devel \
     # --- Librerías GTK4 para Linux ---
     pkgconf-pkg-config gtk4-devel \
     # --- Librerías GTK4 para Windows (Compilación cruzada) ---

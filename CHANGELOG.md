@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
 
+## [0.0.6] - 2026-08-27
+
+### Changed 
+- `include/subject.h` and `src/subject.c` can compres in lmza/xz now
+- `xz-devel` library has add in the dockerfile
+
 ## [0.0.5] - 2026-08-15
 
 ### Added

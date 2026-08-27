@@ -45,15 +45,15 @@ cd ~/StudyStudio
 docker build -t mi_app_builder .
 
 docker run -it --rm \
-    -v $(pwd)/src:/usr/src/app/src \
-    -v $(pwd)/src:/include:/usr/src/app/include \
-    -v $(pwd)/build:/usr/src/app/build \
-    -v $(pwd)/Makefile:/usr/src/app/Makefile \
-    -v $(pwd)/resources.xml:/usr/src/app/resources.xml \
-    -v $(pwd)/interface.ui:/usr/src/app/interface.ui \
-    mi_app_builder \
-    make all
-
+  -v "$(pwd)/src:/usr/src/app/src" \
+  -v "$(pwd)/src:/usr/src/app/include" \
+  -v "$(pwd)/build:/usr/src/app/build" \
+  -v "$(pwd)/Makefile:/usr/src/app/Makefile" \
+  -v "$(pwd)/resources.xml:/usr/src/app/resources.xml" \
+  -v "$(pwd)/interface.ui:/usr/src/app/interface.ui" \
+  mi_app_builder \
+  /bin/bash
+  
 # to run LINUX
 ./build/studystudio-0.0.x_linux
 

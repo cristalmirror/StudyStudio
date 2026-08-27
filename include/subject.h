@@ -10,7 +10,8 @@
 #define IN_BUF_SIZE 65536
 #define OUT_BUF_SIZE 65536
 
-
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 typedef struct Subject Subject;
 
 struct Subject {
