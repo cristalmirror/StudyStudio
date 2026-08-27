@@ -71,7 +71,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     }
 
     close(pipefd[1]);
-    
+    //archive manipulation code...
 }
 
 /*destructor*/
