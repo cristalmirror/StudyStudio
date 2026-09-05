@@ -2,6 +2,7 @@ NAME      := studystudio-0.0.6
 SRC_DIR   := src
 INCLUDE_DIR := include
 BUILD_DIR := build
+RESOURCE_SRC := $(BUILD_DIR)/resources.c
 
 # ==========================================
 # 1. Compilación para Linux
@@ -13,7 +14,7 @@ GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4)
 INCLUDES := -I$(INCLUDE_DIR)
 
 CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
-LDFLAGS_LINUX := $(GTK_LIBS_LINUX)
+LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -llzma
 
 # ==========================================
 # 2. Compilación para Windows (MinGW-w64)
@@ -25,7 +26,7 @@ GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk
 GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4)
 
 CFLAGS_WIN  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
-LDFLAGS_WIN := $(GTK_LIBS_WIN) -mwindows -static-libgcc
+LDFLAGS_WIN := $(GTK_LIBS_WIN) -llzma -mwindows -static-libgcc
 
 # ==========================================
 # Archivos fuente
@@ -47,37 +48,36 @@ setup:
 	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64
 
 # --- Generar resources.c ---
-resources.c: resources.xml interface.ui
+$(RESOURCE_SRC): resources.xml interface.ui | setup
 	glib-compile-resources --generate-source --target=$@ $<
 
 # --- Linux ---
-linux: setup resources.c $(BUILD_DIR)/$(NAME)_linux
+linux: $(BUILD_DIR)/$(NAME)_linux
 
 $(BUILD_DIR)/$(NAME)_linux: $(OBJS_LINUX)
 	$(CC_LINUX) $(OBJS_LINUX) -o $@ $(LDFLAGS_LINUX)
 	@echo "[✓] Compilado para Linux: $@"
 
-$(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
 
-$(BUILD_DIR)/linux/resources.o: resources.c
+$(BUILD_DIR)/linux/resources.o: $(RESOURCE_SRC) | setup
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
 
 # --- Windows ---
-win64: setup resources.c $(BUILD_DIR)/$(NAME)_win64.exe
+win64: $(BUILD_DIR)/$(NAME)_win64.exe
 
 $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 	$(CC_WIN64) $(OBJS_WIN64) -o $@ $(LDFLAGS_WIN)
 	@echo "[✓] Compilado para Windows: $@"
 
-$(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
 
-$(BUILD_DIR)/win64/resources.o: resources.c
+$(BUILD_DIR)/win64/resources.o: $(RESOURCE_SRC) | setup
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
 
 # --- Limpieza ---
 clean:
 	rm -rf $(BUILD_DIR) resources.c
 	@echo "[✓] Carpeta build/ y resources.c eliminados."
-

@@ -207,7 +207,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
 int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
 
     /* Set init and check if data are fine */
-    if (!path || !out_buf, !out_size) return -1;
+    if (!path || !out_buf || !out_size) return -1;
 
     *out_buf = NULL;
     *out_size = 0;
@@ -217,7 +217,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     // init lzma_stream
     lzma_stream strm = LZMA_STREAM_INIT;
-    lzma_ret ret  = lzma_stream_decoder_mt(&strm, UINT16_MAX, LZMA_CONCATENATED);
+    lzma_ret ret  = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
     if (ret != LZMA_OK) {
         fclose(f);
         return -3;
@@ -248,7 +248,6 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     size_t acc_cap = 0;
 
     lzma_action action = LZMA_RUN;
-    int finished = 0;
 
     do {
         /* Read the archive if haven't input data pending */
@@ -309,9 +308,9 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
         }
 
         if (ret == LZMA_STREAM_END) {
-            finished = 1; break;
-        } else if (ret != LZMA_OK) {
-            break; // error
+            break;
+        } else if (ret == LZMA_OK) {
+            continue; // error
         }
         
         /*if haven't more input and don't produced output and EOF, finish  */

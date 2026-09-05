@@ -44,6 +44,7 @@ cd ~/StudyStudio
 
 docker build -t mi_app_builder .
 
+mkdir -p build
 
 docker run --rm \
     --user "$(id -u):$(id -g)" \
@@ -82,4 +83,3 @@ StudyStudio/
 ├── Dockerfile # Fedora 40 build environment
 ├── CHANGELOG.md # Version history
 └── README.md # This file
-

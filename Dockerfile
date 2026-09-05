@@ -12,6 +12,7 @@ RUN dnf install -y \
     # --- Librerías GTK4 para Windows (Compilación cruzada) ---
     mingw64-gcc \
     mingw64-gtk4 \
+    mingw64-xz \
     mingw64-pkg-config \
     && dnf clean all
 
