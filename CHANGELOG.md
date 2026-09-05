@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
 
+## [0.0.7] - 2026-08-27
+
+## Added
+- The in `subject.c` and `subject.h` the funtion `load_subject()`
 ## [0.0.6] - 2026-08-27
 
 ### Changed 

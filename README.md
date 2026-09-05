@@ -2,7 +2,7 @@
 
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
-[![Version](https://img.shields.io/badge/version-0.0.6-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.0.7-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
@@ -44,16 +44,18 @@ cd ~/StudyStudio
 
 docker build -t mi_app_builder .
 
-docker run -it --rm \
-  -v "$(pwd)/src:/usr/src/app/src" \
-  -v "$(pwd)/src:/usr/src/app/include" \
-  -v "$(pwd)/build:/usr/src/app/build" \
-  -v "$(pwd)/Makefile:/usr/src/app/Makefile" \
-  -v "$(pwd)/resources.xml:/usr/src/app/resources.xml" \
-  -v "$(pwd)/interface.ui:/usr/src/app/interface.ui" \
-  mi_app_builder \
-  /bin/bash
-  
+
+docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -v "$(pwd)/src:/usr/src/app/src" \
+    -v "$(pwd)/include:/usr/src/app/include" \
+    -v "$(pwd)/build:/usr/src/app/build" \
+    -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
+    -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
+    -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
+    mi_app_builder \
+    make all
+      
 # to run LINUX
 ./build/studystudio-0.0.x_linux
 

@@ -18,6 +18,7 @@ struct Subject {
     int val;
     void (*fatal)(const char *msg);
     void (*read_subject)(Subject *self);
+    int (*load_subject)(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size);
     void (*save_subject)(Subject *self, char **msg, const char **dir, const char **outpath);
     void (*close_subject)(Subject *self);
 };

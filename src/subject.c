@@ -194,6 +194,154 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     
 }
 
+/* This function load subject:
+ *
+ * This function decompress the .xz archive
+ * and load al archives (.doc .pdf .txt .html, etc).
+ *
+ * `path` is the .xz archive.
+ * `out_buf` pointer buffer with the data decompress
+ * `out_size` buffer bytes size
+ */
+
+int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
+
+    /* Set init and check if data are fine */
+    if (!path || !out_buf, !out_size) return -1;
+
+    *out_buf = NULL;
+    *out_size = 0;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return -2;
+
+    // init lzma_stream
+    lzma_stream strm = LZMA_STREAM_INIT;
+    lzma_ret ret  = lzma_stream_decoder_mt(&strm, UINT16_MAX, LZMA_CONCATENATED);
+    if (ret != LZMA_OK) {
+        fclose(f);
+        return -3;
+    }
+
+
+    /* Input/output Buffer */
+    const size_t IN_CHUNK = 1 << 16;
+    const size_t OUT_CHUNK = 1 << 16;
+
+    /*
+     * YES, this form of define is a shit, but is more easy
+     * to write, pleace don't mistake with `**out_buf`
+     */
+    uint8_t *inbuf = malloc(IN_CHUNK);
+    uint8_t *outbuf = malloc(OUT_CHUNK);
+
+    if (!inbuf || !outbuf) {
+        free(inbuf);
+        free(outbuf);
+        lzma_end(&strm);
+        fclose(f);
+    }
+
+    /* Dinamic Buffer accumulators */
+    uint8_t *acc = LZMA_RUN;
+    size_t acc_size = 0;
+    size_t acc_cap = 0;
+
+    lzma_action action = LZMA_RUN;
+    int finished = 0;
+
+    do {
+        /* Read the archive if haven't input data pending */
+        if (strm.avail_in == 0 && !feof(f)) {
+            size_t r = fread(inbuf, 1, IN_CHUNK, f);
+
+            if (ferror(f)) {
+                ret = LZMA_DATA_ERROR;
+                break;
+            }
+            strm.next_in = inbuf;
+            strm.avail_in = r;
+
+            if (feof(f)) {
+                action = LZMA_FINISH;
+            }
+        }
+
+        /* decompress info and size */
+        strm.next_out = outbuf;
+        strm.avail_out = OUT_CHUNK;
+
+        /* Decompress execute:
+         *
+         * this call can consume part or all
+         * input data and put it in `outbuf`.
+         *
+         * In the call be used:
+         *
+         * - strm.next_in
+         * - strm.avail_in
+         * - strm.next_out
+         * - strm.avail_out
+         */
+        ret = lzma_code(&strm, action);
+
+        // copy the result product to accumulator
+        
+        size_t produced = OUT_CHUNK - strm.avail_out;
+        if (produced > 0) {
+            /* resize and realalocation if is necesary
+             * more capacity to accumulator (acc).
+             */
+            if (acc_size + produced > acc_cap) {
+                size_t new_cap = new_cap = acc_cap ? acc_cap * 2 : produced;
+
+                while (new_cap < acc_size + produced) new_cap *= 2;
+                uint8_t *tmp = realloc(acc, new_cap);
+                if (!tmp) {
+                    ret = LZMA_MEM_ERROR;
+                    break;
+                }
+                acc = tmp;
+                acc_cap = new_cap;
+            }
+            memcpy(acc + acc_size, outbuf, produced);
+            acc_size += produced;
+        }
+
+        if (ret == LZMA_STREAM_END) {
+            finished = 1; break;
+        } else if (ret != LZMA_OK) {
+            break; // error
+        }
+        
+        /*if haven't more input and don't produced output and EOF, finish  */
+        if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_CHUNK) break;
+
+    } while (1);
+
+    /* free mememory resources of decoder */
+    lzma_end(&strm);
+    free(inbuf);
+    free(outbuf);
+    fclose(f);
+
+    /*
+     * Error maps to return code
+     * "Ah shit, here we go again!!!"
+     */
+    if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
+        free(acc);
+        if (ret == LZMA_MEM_ERROR) return -5;
+        if (ret == LZMA_FORMAT_ERROR) return -6;
+        if (ret == LZMA_DATA_ERROR) return -7;
+        return -8; // error lzma unknow
+    }
+
+    *out_buf = acc;
+    *out_size = acc_size;
+    return 0;
+}
+
 /*destructor*/
 void _close_subject(Subject *self) {
     if (self != NULL) {
@@ -214,6 +362,7 @@ Subject *new_subject(int value) {
     new->read_subject = _read_subject;
     new->close_subject = _close_subject;
     new->fatal = _fatal;
+    new->load_subject = _load_subject;
     return new;
 }
 
