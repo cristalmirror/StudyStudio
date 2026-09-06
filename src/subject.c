@@ -80,15 +80,31 @@ static void _fatal(const char *msg) {
 void _read_subject(Subject *self) {
     printf("Valor >> %i\n",self->val);
 }
+
+/* To me this is more simple to implement the same 
+ * function in two Operating System.
+ * 
+ * Else form is use the TAR comand for windows,
+ * but isn't the idea is implement XZ algorithm
+ * incide of code.
+ */
+#ifdef _WIN32
+
+int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
+
+}
+
+
+void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
+
+}
+#else
 /*compres and save al archives and information*/
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
 
     int pipefd[2];
     if (pipe(pipefd) == -1) self->fatal("pipe");
-
-    self->pid = fork();
-    if (self->pid == -1) self->fatal("fork");
-
+    if (self->pid == -1) self->fatal("fork");   
     if (self->pid == 0) {
       /*
        * son process: execute tar -cf - -C <pernt_of_dir> <basename>
@@ -398,6 +414,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     return 0;
 }
 
+#endif
 /*destructor*/
 void _close_subject(Subject *self) {
     if (self != NULL) {

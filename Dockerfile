@@ -5,14 +5,15 @@ FROM fedora:40
 RUN dnf install -y \
     # --- Herramientas básicas ---
     gcc gcc-c++ make git \
-    # --- Librerías LMZA para linux --
-    xz-devel \
+    # --- Librerías de compresión y empaquetado para Linux ---
+    xz-devel libarchive-devel \
     # --- Librerías GTK4 para Linux ---
     pkgconf-pkg-config gtk4-devel \
     # --- Librerías GTK4 para Windows (Compilación cruzada) ---
     mingw64-gcc \
     mingw64-gtk4 \
     mingw64-xz \
+    mingw64-libarchive \
     mingw64-pkg-config \
     && dnf clean all
 

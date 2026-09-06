@@ -14,7 +14,7 @@ GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4)
 INCLUDES := -I$(INCLUDE_DIR)
 
 CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
-LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -llzma
+LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -larchive -llzma
 
 # ==========================================
 # 2. Compilación para Windows (MinGW-w64)
@@ -26,7 +26,7 @@ GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk
 GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4)
 
 CFLAGS_WIN  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
-LDFLAGS_WIN := $(GTK_LIBS_WIN) -llzma -mwindows -static-libgcc
+LDFLAGS_WIN := $(GTK_LIBS_WIN) -larchive -llzma -mwindows -static-libgcc
 
 # ==========================================
 # Archivos fuente
