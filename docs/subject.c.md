@@ -16,6 +16,8 @@ Implements subject construction/destruction, diagnostic output, process waiting,
 
 `_save_subject(self, msg, dir, outpath)` expects pointers to directory and destination path strings. It does not validate these arguments; `msg` is unused.
 
+This operatin have two implementations, one for linux system, other for Windows. The windows implementatons ar defined, but nos maked.
+
 1. Creates a pipe and forks a child.
 2. Resolves the directory and executes `tar -cf - -C <parent> <base>` in the child, sending output to the pipe.
 3. Opens the destination and encodes pipe data with liblzma preset `6 | LZMA_PRESET_EXTREME` and CRC64.
@@ -42,6 +44,7 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 
 These return codes describe the current implementation, not a complete or reliable error contract for every failure path.
 
+This operatin have two implementations, one for linux system, other for Windows. The windows implementatons ar defined, but nos maked.
 ## Known implementation limitations
 
 - Saving uses POSIX `fork`, `pipe`, and related calls without a Windows implementation. The Windows wait branch alone does not make this module portable.
