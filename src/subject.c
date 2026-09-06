@@ -7,8 +7,15 @@
 /*OS macro definitions*/
 #ifdef _WIN32
    #include <limits.h>
+    /*
+     * windows.h is used how altenative for windows OS
+     * of sys/wait.h, beacuse is a POSIX standard, and
+     * don't are ported for windows. 
+     */
+   #include <windows.h>
 #else
    #include <linux/limits.h>
+   #include <sys/wait.h>
 #endif
 
 /*standard definitions for all OS*/
@@ -22,9 +29,48 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <stdbool.h>
 #include "../include/subject.h"
+
+
+/*
+ * This function is to set the option
+ * of waitpid correct according to whom
+ * OS is compiled (Windows or GNU/Linux).
+ */
+
+/* Returns -1 on API failure; optional status is 0 for success, 1 otherwise. */
+static int _wait_pid_os_opt(Subject *self, int *status) {
+#ifdef _WIN32
+    if (WaitForSingleObject(self->pid, INFINITE) == WAIT_FAILED) {
+        fprintf(stderr, "Error esperando: %lu\n", GetLastError());
+        return -1;
+    }
+    if (status != NULL) {
+        DWORD exit_code;
+        if (!GetExitCodeProcess(self->pid, &exit_code)) {
+            fprintf(stderr, "Error consultando salida: %lu\n", GetLastError());
+            return -1;
+        }
+        *status = (exit_code == 0) ? 0 : 1;
+    }
+#else
+    int raw_status;
+    pid_t result;
+    do {
+        result = waitpid(self->pid, status != NULL ? &raw_status : NULL, 0);
+    } while (result == -1 && errno == EINTR);
+    if (result == -1) {
+        perror("waitpid");
+        return -1;
+    }
+    if (status != NULL) {
+        *status = (WIFEXITED(raw_status) && WEXITSTATUS(raw_status) == 0)
+                  ? 0 : 1;
+    }
+#endif
+    return 0;
+}
 
 static void _fatal(const char *msg) {
     perror(msg);
@@ -40,10 +86,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     int pipefd[2];
     if (pipe(pipefd) == -1) self->fatal("pipe");
 
-    pid_t pid = fork();
-    if (pid == -1) self->fatal("fork");
+    self->pid = fork();
+    if (self->pid == -1) self->fatal("fork");
 
-    if (pid == 0) {
+    if (self->pid == 0) {
       /*
        * son process: execute tar -cf - -C <pernt_of_dir> <basename>
        * redirect stdout of son process to the of write pipe 
@@ -87,8 +133,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     FILE *outf = fopen(*outpath, "wb");
     if (!outf) {
         int save_errno = errno;
-        kill(pid, SIGTERM);
-        waitpid(pid, NULL, 0);
+        kill(self->pid, SIGTERM);
+        if (self->wait_pid_os_opt(self,NULL) == -1) {
+            fprintf(stderr,"Error in the request %d\n",-1);
+        } 
         errno = save_errno;
         self->fatal("fopen output");
     }
@@ -97,8 +145,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     lzma_ret ret = lzma_easy_encoder(&strm, 6 | LZMA_PRESET_EXTREME, LZMA_CHECK_CRC64);
     if (ret != LZMA_OK) {
         fclose(outf);
-        kill(pid, SIGTERM);
-        waitpid(pid, NULL, 0);
+        kill(self->pid, SIGTERM);
+        if (self->wait_pid_os_opt(self,NULL) == -1) {
+            fprintf(stderr,"Error in the request %d\n",-1);
+        } 
         fprintf(stderr, "lzma_easy_encoder failed: %d\n", ret);
         return;
     }
@@ -116,8 +166,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
                 perror("read form tar pipe");
                 lzma_end(&strm);
                 fclose(outf);
-                kill(pid, SIGTERM);
-                waitpid(pid, NULL, 0);
+                kill(self->pid, SIGTERM);
+                if (self->wait_pid_os_opt(self,NULL) == -1) {
+                    fprintf(stderr,"Error in the request %d\n",-1);
+                } 
                 return;
             } else if (r == 0) {
                 // EOF of tar stream
@@ -148,8 +200,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
                 perror("fwrite exit xz");
                 lzma_end(&strm);
                 fclose(outf);
-                kill(pid, SIGTERM);
-                waitpid(pid, NULL, 0);
+                kill(self->pid, SIGTERM);
+                if (self->wait_pid_os_opt(self,NULL) == -1) {
+                    fprintf(stderr,"Error in the request %d\n",-1);
+                } 
                 return;
             }
         }
@@ -161,8 +215,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
             fprintf(stderr,"lzma_code error: %d\n", ret);
             lzma_end(&strm);
             fclose(outf);
-            kill(pid, SIGTERM);
-            waitpid(pid, NULL, 0);
+            kill(self->pid, SIGTERM);
+            if (self->wait_pid_os_opt(self,NULL) == -1) {
+                fprintf(stderr,"Error in the request %d\n",-1);
+            }   
             return;
         }
 
@@ -182,11 +238,12 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     fclose(outf);
     close(pipefd[0]);
 
-    // waiting a tar son
-    int status = 0;
-    waitpid(pid, &status, 0);
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        fprintf(stderr, "tar susseccful %d\n", WEXITSTATUS(status));
+    int status;
+    if (self->wait_pid_os_opt(self, &status) == -1) {
+        return;
+    }
+    if (status != 0) {
+        fprintf(stderr, "tar failed\n");
         return;
     }
 
@@ -358,6 +415,9 @@ Subject *new_subject(int value) {
     }
 
     new->val = value;
+    new->pid = 0;
+    new->wait_pid_os_opt = _wait_pid_os_opt;
+    new->save_subject = _save_subject;
     new->read_subject = _read_subject;
     new->close_subject = _close_subject;
     new->fatal = _fatal;
