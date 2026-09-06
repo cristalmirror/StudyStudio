@@ -25,6 +25,8 @@ This operatin have two implementations, one for linux system, other for Windows.
 
 The intended output is an XZ-compressed TAR stream. Errors are inconsistently handled through process termination, diagnostic output, or an early return. The function returns `void`, so callers cannot reliably detect success. Opening with `wb` can overwrite an existing file, and failures can leave a partial output.
 
+This operation have two implementations, one for linux system, other for Windows. The windows implementatons are defined, but not maked logics.
+
 ## Loading
 
 `_load_subject(self, path, out_buf, out_size)` reads an XZ file, decodes it with concatenated streams enabled, and accumulates decompressed bytes in a dynamically allocated buffer. `self` is unused. This operation does not extract TAR entries or construct a subject from the decoded bytes.
@@ -44,7 +46,7 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 
 These return codes describe the current implementation, not a complete or reliable error contract for every failure path.
 
-This operatin have two implementations, one for linux system, other for Windows. The windows implementatons ar defined, but nos maked.
+This operation have two implementations, one for linux system, other for Windows. The windows implementatons are defined, but not maked logics.
 ## Known implementation limitations
 
 - Saving uses POSIX `fork`, `pipe`, and related calls without a Windows implementation. The Windows wait branch alone does not make this module portable.
