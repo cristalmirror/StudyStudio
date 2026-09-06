@@ -81,12 +81,14 @@ void _read_subject(Subject *self) {
     printf("Valor >> %i\n",self->val);
 }
 
-/* To me this is more simple to implement the same 
+/* 
+ * To me this is more simple to implement the same 
  * function in two Operating System.
  * 
  * Else form is use the TAR comand for windows,
  * but isn't the idea is implement XZ algorithm
  * incide of code.
+ * 
  */
 #ifdef _WIN32
 
