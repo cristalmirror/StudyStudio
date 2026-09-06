@@ -41,34 +41,34 @@
 
 /* Returns -1 on API failure; optional status is 0 for success, 1 otherwise. */
 static int _wait_pid_os_opt(Subject *self, int *status) {
-#ifdef _WIN32
-    if (WaitForSingleObject(self->pid, INFINITE) == WAIT_FAILED) {
-        fprintf(stderr, "Error esperando: %lu\n", GetLastError());
-        return -1;
-    }
-    if (status != NULL) {
-        DWORD exit_code;
-        if (!GetExitCodeProcess(self->pid, &exit_code)) {
-            fprintf(stderr, "Error consultando salida: %lu\n", GetLastError());
+    #ifdef _WIN32
+        if (WaitForSingleObject(self->pid, INFINITE) == WAIT_FAILED) {
+            fprintf(stderr, "Error esperando: %lu\n", GetLastError());
             return -1;
         }
-        *status = (exit_code == 0) ? 0 : 1;
-    }
-#else
-    int raw_status;
-    pid_t result;
-    do {
-        result = waitpid(self->pid, status != NULL ? &raw_status : NULL, 0);
-    } while (result == -1 && errno == EINTR);
-    if (result == -1) {
-        perror("waitpid");
-        return -1;
-    }
-    if (status != NULL) {
-        *status = (WIFEXITED(raw_status) && WEXITSTATUS(raw_status) == 0)
+        if (status != NULL) {
+            DWORD exit_code;
+            if (!GetExitCodeProcess(self->pid, &exit_code)) {
+                fprintf(stderr, "Error consultando salida: %lu\n", GetLastError());
+                return -1;
+            }
+            *status = (exit_code == 0) ? 0 : 1;
+        }
+    #else
+        int raw_status;
+        pid_t result;
+        do {
+            result = waitpid(self->pid, status != NULL ? &raw_status : NULL, 0);
+        } while (result == -1 && errno == EINTR);
+        if (result == -1) {
+            perror("waitpid");
+            return -1;
+        }
+        if (status != NULL) {
+            *status = (WIFEXITED(raw_status) && WEXITSTATUS(raw_status) == 0)
                   ? 0 : 1;
-    }
-#endif
+        }
+    #endif
     return 0;
 }
 
