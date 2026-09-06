@@ -24,7 +24,7 @@ This operatin have two implementations, one for linux system, other for Windows.
 4. Writes compressed bytes, releases resources on the normal path, waits for the child, and prints a completion message when successful.
 
 The intended output is an XZ-compressed TAR stream. Errors are inconsistently handled through process termination, diagnostic output, or an early return. The function returns `void`, so callers cannot reliably detect success. Opening with `wb` can overwrite an existing file, and failures can leave a partial output.
-
+### Warning
 This operation have two implementations, one for linux system, other for Windows. The windows implementatons are defined, but not maked logics.
 
 ## Loading
@@ -45,7 +45,7 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 | `-8` | Other decoder error. |
 
 These return codes describe the current implementation, not a complete or reliable error contract for every failure path.
-
+### Warning
 This operation have two implementations, one for linux system, other for Windows. The windows implementatons are defined, but not maked logics.
 ## Known implementation limitations
 
