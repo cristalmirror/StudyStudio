@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### In progress
+- Started a private native Windows directory traversal based on
+  `FindFirstFileA` / `FindNextFileA`.
+- Started serialization of regular-file entries into the active LZMA stream
+  using little-endian route-length and file-size fields.
+- Reparse points are rejected during Windows traversal to avoid recursive
+  directory cycles.
+
+### Known Issues
+- Windows saving is not connected to `_save_subject` yet.
+- Windows loading is not implemented.
+- The internal Windows entry format has no version, end marker, or compatible
+  extraction routine yet; it must not be treated as a stable archive format.
+
 ### Planned
 - Implement CSS custom styles for widgets
 - Add `GtkListView` / `GtkColumnView` for high-performance lists

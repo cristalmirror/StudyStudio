@@ -6,6 +6,10 @@ Status: draft for user approval; version 0.0.7.
 
 Declares `Subject`, its public fields and operation pointers, and the `new_subject(int value)` constructor. Defines input/output buffer sizes of 65,536 bytes.
 
+The Windows archive traversal helpers are deliberately not part of this public
+interface. `WalkContext`, `_walk_directory`, `_write_file_entry_to_lzma`, and
+`_feed_bytes` are private implementation details of `src/subject.c`.
+
 ## Current interface
 
 | Member or function | Current contract |
@@ -19,6 +23,10 @@ Declares `Subject`, its public fields and operation pointers, and the `new_subje
 | `save_subject(self, msg, dir, outpath)` | Attempts to archive a directory and compress it to the destination. Returns no success/failure value; `msg` is unused. |
 | `close_subject(self)` | Frees the object; accepts `NULL` in the default implementation. |
 | `new_subject(value)` | Returns a heap-allocated object with default operations, or `NULL` on allocation failure. |
+
+No public Windows-specific archive traversal method is currently exposed.
+Callers must use `save_subject`; they must not depend on the internal archive
+format or its helper structures.
 
 Although there is a forward typedef, the full structure is public: consumers can access and modify its state and operation pointers. The header also exposes platform headers and defines feature-test macros after other includes, which may be too late to affect declarations.
 

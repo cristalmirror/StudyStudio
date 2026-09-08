@@ -4,7 +4,10 @@ Status: draft for user approval; version 0.0.7.
 
 ## Purpose and dependencies
 
-Implements subject construction/destruction, diagnostic output, process waiting, directory archiving with external `tar`, and XZ compression/decompression through liblzma. Uses standard C I/O and allocation, POSIX process APIs, and a Windows-specific waiting branch.
+Implements subject construction/destruction, diagnostic output, process waiting,
+and XZ archive handling through liblzma. Linux currently archives directories
+with external `tar`; Windows has an in-progress native directory traversal and
+custom entry serializer.
 
 ## Lifecycle and helper operations
 
@@ -16,14 +19,43 @@ Implements subject construction/destruction, diagnostic output, process waiting,
 
 `_save_subject(self, msg, dir, outpath)` expects pointers to directory and destination path strings. It does not validate these arguments; `msg` is unused.
 
-This operatin have two implementations, one for linux system, other for Windows. The windows implementatons ar defined, but nos maked.
+Linux saving currently has the working implementation:
 
 1. Creates a pipe and forks a child.
 2. Resolves the directory and executes `tar -cf - -C <parent> <base>` in the child, sending output to the pipe.
 3. Opens the destination and encodes pipe data with liblzma preset `6 | LZMA_PRESET_EXTREME` and CRC64.
 4. Writes compressed bytes, releases resources on the normal path, waits for the child, and prints a completion message when successful.
 
-The intended output is an XZ-compressed TAR stream. Errors are inconsistently handled through process termination, diagnostic output, or an early return. The function returns `void`, so callers cannot reliably detect success. Opening with `wb` can overwrite an existing file, and failures can leave a partial output.
+The Linux output is an XZ-compressed TAR stream. Errors are inconsistently handled through process termination, diagnostic output, or an early return. The function returns `void`, so callers cannot reliably detect success. Opening with `wb` can overwrite an existing file, and failures can leave a partial output.
+
+### Windows saving: in progress
+
+Windows does not invoke a complete save workflow yet. The private helpers in
+`subject.c` are being prepared for a native implementation that does not depend
+on `tar`:
+
+- `_walk_directory(self, base_path, rel_prefix, ctx)` recursively enumerates
+  files with `FindFirstFileA` and `FindNextFileA`.
+- `_write_file_entry_to_lzma(...)` serializes one regular file and feeds it to
+  the active LZMA encoder.
+- `_feed_bytes(self, ...)` is the private method responsible for passing input
+  bytes to liblzma and writing generated compressed bytes to the destination.
+
+Each file entry uses this private binary representation before compression:
+
+```text
+u32 little-endian route length
+route bytes
+u64 little-endian file size
+file bytes
+```
+
+Directories themselves are not serialized; they are represented only through
+the relative paths of their files. Reparse points are rejected to prevent
+recursive cycles.
+
+This is not yet a stable archive format: it has no magic value, version,
+end-of-archive marker, or matching Windows loader.
 ### Warning
 This operation have two implementations, one for linux system, other for Windows. The windows implementatons are defined, but not maked logics.
 
@@ -49,7 +81,13 @@ These return codes describe the current implementation, not a complete or reliab
 This operation have two implementations, one for linux system, other for Windows. The windows implementatons are defined, but not maked logics.
 ## Known implementation limitations
 
-- Saving uses POSIX `fork`, `pipe`, and related calls without a Windows implementation. The Windows wait branch alone does not make this module portable.
+- Windows saving and loading are incomplete. The native Windows traversal and
+  entry writer are private implementation work and are not called by
+  `_save_subject` yet.
+- The Windows entry format currently records only files, so empty directories
+  cannot be restored.
+- `MAX_PATH` and `FindFirstFileA` limit Windows paths and do not provide full
+  Unicode-path support.
 - The root-level directory path branch copies the base name into `parent` instead of `base`, leaving `base` uninitialized.
 - The encoding loop can replace pending input before liblzma has consumed it all.
 - Several save error paths leave the read side of the pipe open; some final I/O results are not checked.

@@ -7,6 +7,7 @@
 /*OS macro definitions*/
 #ifdef _WIN32
    #include <limits.h>
+   #include <inttypes.h>
     /*
      * windows.h is used how altenative for windows OS
      * of sys/wait.h, beacuse is a POSIX standard, and
@@ -91,11 +92,303 @@ void _read_subject(Subject *self) {
  * 
  */
 #ifdef _WIN32
+/* Module for windows code
+ * 
+ * This part of the code contente all code that is necesary 
+ * to the algorithm can run in Windows and maintain the 
+ * interface with code rest.
+ * 
+ * May be in the future this part of the code can be hun in our
+ * .h and .c, but the moment is better that all are integrated
+ * here.
+ */
 
 int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
 
 }
 
+/*
+ *  ------- SO IMPORTANT!!! ------- 
+ *  All functions and methods that has whited here
+ *  are necesary to _save_subject() runing fine.
+ *
+ */
+
+/* Write integer values in the archive's little-endian format. */
+static int _write_u32_le(FILE *f, uint32_t v) {
+    uint8_t b[4];
+    b[0] = v & 0xFF;
+    b[1] = (v >> 8) & 0xFF;
+    b[2] = (v >> 16) & 0xFF;
+    b[3] = (v >> 24) & 0xFF;
+    return fwrite(b, 1, sizeof(b), f) == sizeof(b) ? 0 : -1;
+}
+
+static int _write_u64_le(FILE *f, uint64_t v) {
+    uint8_t b[8];
+
+    for (int i = 0; i < 8; i++) b[i] = (v >> (8 * i)) & 0xFF;
+    return fwrite(b, 1, sizeof(b), f) == sizeof(b) ? 0 : -1;
+}
+
+/*
+ * Make route to connect base + "\" + name int UTF-8 simple 
+ * (ANSI -> UTF-8 not implemented here). 
+ * 
+ * For stability in platforms with Unicode usa WideCharToMultiByte
+ * on the name wide.
+ * 
+ * Here we assume ANSI routes (or compile con UTF-8 in framework). 
+ */
+static int _is_dot_or_dotdot(Subject *self, const char *name) {
+    (void)self;
+    return name != NULL && name[0] == '.' &&
+           (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
+}
+
+/* Devuelve 0 en éxito, != 0 en error. */
+
+static int _feed_bytes(lzma_stream *strm,
+                      uint8_t *outbuf, size_t out_buf_size,
+                      FILE *outfile,
+                      const uint8_t *data, size_t len)
+{
+    const uint8_t *p = data;
+    size_t left = len;
+
+    while (left > 0) {
+        /* Alimentamos todo lo que nos queda; lzma_code actualizará next_in/avail_in. */
+        strm->next_in = (uint8_t *)p;      /* liblzma API requiere uint8_t*, por eso el cast */
+        strm->avail_in = left;
+
+        do {
+            strm->next_out = outbuf;
+            strm->avail_out = out_buf_size;
+
+            lzma_ret ret = lzma_code(strm, LZMA_RUN);
+
+            /* Si se produjo salida, escribirla */
+            if (strm->avail_out < out_buf_size) {
+                size_t wrote = out_buf_size - strm->avail_out;
+                if (fwrite(outbuf, 1, wrote, outfile) != wrote)
+                    return -1;
+            }
+
+            if (ret != LZMA_OK) {
+                if (ret == LZMA_STREAM_END) {
+                    /* No es esperado durante LZMA_RUN (se usa en LZMA_FINISH),
+                       pero tratamos como terminación segura. */
+                    return 0;
+                }
+                fprintf(stderr, "lzma_code error: %d\n", (int)ret);
+                return -1;
+            }
+
+            /* Repetir hasta que lzma consuma toda la entrada (avail_in == 0). */
+        } while (strm->avail_in > 0);
+
+        /* lzma consumió todo lo que le dimos; avanzar el puntero */
+        /* strm->next_in fue incrementado internamente por liblzma,
+           pero no confiamos en ello para nuestro pointer local; consumimos 'left' bytes. */
+        p += left;
+        left = 0;
+    }
+
+    return 0;
+}
+/*
+ * Write a input (header + content) to encoder: return 0 Ok.
+ */
+static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const char *fullpath, lzma_stream *strm, FILE *outfile) {
+    (void)self;
+
+    if (!relpath || !fullpath || !strm || !outfile) {
+        return -1;
+    }
+
+    size_t relpath_size = strlen(relpath);
+    if (relpath_size > UINT32_MAX) {
+        fprintf(stderr, "Path too long: %s\n", relpath);
+        return -1;
+    }
+
+    //Open binary mode
+    FILE *f = fopen(fullpath, "rb");
+    if (!f) {
+        fprintf(stderr," fopen(%s) failed \n",fullpath);
+        return -1;
+    } 
+
+    //to fetch size
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return -1;
+    }
+    long pos = ftell(f);
+    if (pos < 0) {
+        fclose(f); 
+        return -1;
+    }
+    uint64_t filesize = (uint64_t)pos;
+    rewind(f);
+
+    //Buffer I/O LMZA
+    uint8_t inbuf[IN_BUF_SIZE];
+    uint8_t outbuf[OUT_BUF_SIZE];
+    uint8_t length_header[4];
+    uint8_t size_header[8];
+
+    /*
+     * First is necesary send the bytes of handler without compress
+     * to the encoder.
+     *
+     * Header: u32(uint32_t)strlen(relpath) + relpath bytes + u64(filesize)
+     */
+    uint32_t rel_len = (uint32_t)relpath_size;
+
+    length_header[0] = (uint8_t)(rel_len & 0xFF);
+    length_header[1] = (uint8_t)((rel_len >> 8) & 0xFF);
+    length_header[2] = (uint8_t)((rel_len >> 16) & 0xFF);
+    length_header[3] = (uint8_t)((rel_len >> 24) & 0xFF);
+
+    for (int i = 0; i < 8; ++i) {
+        size_header[i] = (uint8_t)((filesize >> (8 * i)) & 0xFF);
+    }
+    /*
+     * For put the bytes to the compress flow, we use 
+     * lzma_code() with LZMA_RUN.
+     * 
+     * Implement a little funtion inline to feed bytes
+     *  (repit code header and archive).
+     */
+    if (_feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+                    length_header, sizeof(length_header)) != 0 ||
+        _feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+                    (const uint8_t *)relpath, relpath_size) != 0 ||
+        _feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+                    size_header, sizeof(size_header)) != 0) {
+        fclose(f);
+        return -1;
+    }
+
+    size_t read_count;
+    while ((read_count = fread(inbuf, 1, sizeof(inbuf), f)) > 0) {
+        if (_feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+                        inbuf, read_count) != 0) {
+            fclose(f);
+            return -1;
+        }
+    }
+
+    if (ferror(f)) {
+        fclose(f);
+        return -1;
+    }
+
+    fclose(f);
+    return 0;
+}
+static int _walk_directory(
+      Subject *self,
+      const char *base_path,
+      const char *rel_prefix,
+      WalkContext *ctx) {
+      char search_path[MAX_PATH];
+      WIN32_FIND_DATAA fd;
+
+      if (!self || !base_path || !ctx || !ctx->strm || !ctx->outfile) {
+          return -1;
+      }
+
+      if (rel_prefix && rel_prefix[0] != '\0') {
+          if (snprintf(search_path, sizeof(search_path), "%s\\%s\\*",
+                       base_path, rel_prefix) < 0) {
+              return -1;
+          }
+      } else {
+          if (snprintf(search_path, sizeof(search_path), "%s\\*",
+                       base_path) < 0) {
+              return -1;
+          }
+      }
+
+      HANDLE hfind = FindFirstFileA(search_path, &fd);
+      if (hfind == INVALID_HANDLE_VALUE) {
+          DWORD error = GetLastError();
+
+          if (error == ERROR_FILE_NOT_FOUND) {
+              return 0;
+          }
+
+          fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n",
+                  search_path, (unsigned long)error);
+          return -1;
+      }
+
+      do {
+          const char *name = fd.cFileName;
+          char relpath[MAX_PATH];
+
+          if (_is_dot_or_dotdot(self, name)) {
+              continue;
+          }
+
+          if (rel_prefix && rel_prefix[0] != '\0') {
+              if (snprintf(relpath, sizeof(relpath), "%s\\%s",
+                           rel_prefix, name) < 0) {
+                  FindClose(hfind);
+                  return -1;
+              }
+          } else {
+              if (snprintf(relpath, sizeof(relpath), "%s", name) < 0) {
+                  FindClose(hfind);
+                  return -1;
+              }
+          }
+
+          /*
+           * No seguir enlaces/reparse points: evita ciclos durante
+           * la recursión y mantiene el archivo generado predecible.
+           */
+          if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+              fprintf(stderr, "Reparse point not supported: %s\n", relpath);
+              FindClose(hfind);
+              return -1;
+          }
+
+          if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+              if (_walk_directory(self, base_path, relpath, ctx) != 0) {
+                  FindClose(hfind);
+                  return -1;
+              }
+          } else {
+              char fullpath[MAX_PATH];
+
+              if (snprintf(fullpath, sizeof(fullpath), "%s\\%s",
+                           base_path, relpath) < 0) {
+                  FindClose(hfind);
+                  return -1;
+              }
+
+              if (_write_file_entry_to_lzma(
+                      self, relpath, fullpath, ctx->strm, ctx->outfile) != 0) {
+                  FindClose(hfind);
+                  return -1;
+              }
+          }
+      } while (FindNextFileA(hfind, &fd));
+
+      DWORD error = GetLastError();
+      FindClose(hfind);
+
+      if (error != ERROR_NO_MORE_FILES) {
+          fprintf(stderr, "FindNextFileA failed: %lu\n",
+                  (unsigned long)error);
+          return -1;
+      }
+
+      return 0;
+  }
 
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
 
@@ -433,6 +726,9 @@ Subject *new_subject(int value) {
         return NULL;
     }
 
+    #ifdef _WIN32
+        new->walk_directory =walk_directory;
+    #endif
     new->val = value;
     new->pid = 0;
     new->wait_pid_os_opt = _wait_pid_os_opt;
@@ -443,4 +739,3 @@ Subject *new_subject(int value) {
     new->load_subject = _load_subject;
     return new;
 }
-
