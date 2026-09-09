@@ -115,7 +115,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
  */
 
 /* Write integer values in the archive's little-endian format. */
-static int _write_u32_le(FILE *f, uint32_t v) {
+static int _write_u32_le(Subject *self,FILE *f, uint32_t v) {
     uint8_t b[4];
     b[0] = v & 0xFF;
     b[1] = (v >> 8) & 0xFF;
@@ -138,7 +138,7 @@ static int _write_u64_le(FILE *f, uint64_t v) {
  * For stability in platforms with Unicode usa WideCharToMultiByte
  * on the name wide.
  * 
- * Here we assume ANSI routes (or compile con UTF-8 in framework). 
+ * Here we assume ANSI paths (or compile the framework with UTF-8 support).
  */
 static int _is_dot_or_dotdot(Subject *self, const char *name) {
     (void)self;
@@ -146,7 +146,7 @@ static int _is_dot_or_dotdot(Subject *self, const char *name) {
            (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
 }
 
-/* Devuelve 0 en éxito, != 0 en error. */
+/** Returns 0 on success and a nonzero value on error. */
 
 static int _feed_bytes(lzma_stream *strm,
                       uint8_t *outbuf, size_t out_buf_size,
@@ -157,8 +157,8 @@ static int _feed_bytes(lzma_stream *strm,
     size_t left = len;
 
     while (left > 0) {
-        /* Alimentamos todo lo que nos queda; lzma_code actualizará next_in/avail_in. */
-        strm->next_in = (uint8_t *)p;      /* liblzma API requiere uint8_t*, por eso el cast */
+        /** Feed all remaining input; lzma_code updates next_in and avail_in. */
+        strm->next_in = (uint8_t *)p;      /** The liblzma API requires uint8_t*, hence the cast. */
         strm->avail_in = left;
 
         do {
@@ -167,7 +167,7 @@ static int _feed_bytes(lzma_stream *strm,
 
             lzma_ret ret = lzma_code(strm, LZMA_RUN);
 
-            /* Si se produjo salida, escribirla */
+            /** If output was produced, write it. */
             if (strm->avail_out < out_buf_size) {
                 size_t wrote = out_buf_size - strm->avail_out;
                 if (fwrite(outbuf, 1, wrote, outfile) != wrote)
@@ -176,20 +176,24 @@ static int _feed_bytes(lzma_stream *strm,
 
             if (ret != LZMA_OK) {
                 if (ret == LZMA_STREAM_END) {
-                    /* No es esperado durante LZMA_RUN (se usa en LZMA_FINISH),
-                       pero tratamos como terminación segura. */
+                    /**
+                     * This is not expected during LZMA_RUN (it is used with
+                     * LZMA_FINISH), but handle it as a safe termination.
+                     */
                     return 0;
                 }
                 fprintf(stderr, "lzma_code error: %d\n", (int)ret);
                 return -1;
             }
 
-            /* Repetir hasta que lzma consuma toda la entrada (avail_in == 0). */
+            /** Repeat until LZMA consumes all input (avail_in == 0). */
         } while (strm->avail_in > 0);
 
-        /* lzma consumió todo lo que le dimos; avanzar el puntero */
-        /* strm->next_in fue incrementado internamente por liblzma,
-           pero no confiamos en ello para nuestro pointer local; consumimos 'left' bytes. */
+        /** LZMA consumed all provided input; advance the pointer. */
+        /**
+         * strm->next_in was incremented internally by liblzma, but do not rely
+         * on it for the local pointer; consume `left` bytes.
+         */
         p += left;
         left = 0;
     }
@@ -271,6 +275,9 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
         return -1;
     }
 
+    /*
+     * Read and cout size in bytes.
+     */
     size_t read_count;
     while ((read_count = fread(inbuf, 1, sizeof(inbuf), f)) > 0) {
         if (_feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
@@ -280,115 +287,112 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
         }
     }
 
+    /* file error return error */
     if (ferror(f)) {
         fclose(f);
         return -1;
     }
-
+    /* Close file */
     fclose(f);
     return 0;
 }
+
+
 static int _walk_directory(
-      Subject *self,
-      const char *base_path,
-      const char *rel_prefix,
-      WalkContext *ctx) {
-      char search_path[MAX_PATH];
-      WIN32_FIND_DATAA fd;
+    Subject *self,
+    const char *base_path,
+    const char *rel_prefix,
+    WalkContext *ctx) {
+    char search_path[MAX_PATH];
+    WIN32_FIND_DATAA fd;
 
-      if (!self || !base_path || !ctx || !ctx->strm || !ctx->outfile) {
-          return -1;
-      }
+      /* comprube that parameters aren't NULL*/  
+    if (!self || !base_path || !ctx || !ctx->strm || !ctx->outfile) {
+        return -1;
+    }
 
-      if (rel_prefix && rel_prefix[0] != '\0') {
-          if (snprintf(search_path, sizeof(search_path), "%s\\%s\\*",
-                       base_path, rel_prefix) < 0) {
-              return -1;
-          }
-      } else {
-          if (snprintf(search_path, sizeof(search_path), "%s\\*",
-                       base_path) < 0) {
-              return -1;
-          }
-      }
+    if (rel_prefix && rel_prefix[0] != '\0') {
+        if (snprintf(search_path, sizeof(search_path), "%s\\%s\\*", base_path, rel_prefix) < 0) {
+            return -1;
+        }
+    } else {
+        if (snprintf(search_path, sizeof(search_path), "%s\\*", base_path) < 0) {
+            return -1;
+        }
+    }
 
-      HANDLE hfind = FindFirstFileA(search_path, &fd);
-      if (hfind == INVALID_HANDLE_VALUE) {
-          DWORD error = GetLastError();
+    HANDLE hfind = FindFirstFileA(search_path, &fd);
+    if (hfind == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
 
-          if (error == ERROR_FILE_NOT_FOUND) {
-              return 0;
-          }
+        if (error == ERROR_FILE_NOT_FOUND) {
+            return 0;
+        }
 
-          fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n",
-                  search_path, (unsigned long)error);
-          return -1;
-      }
+        fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
+        return -1;
+    }
 
-      do {
-          const char *name = fd.cFileName;
-          char relpath[MAX_PATH];
+    do {
+        const char *name = fd.cFileName;
+        char relpath[MAX_PATH];
 
-          if (_is_dot_or_dotdot(self, name)) {
-              continue;
-          }
+        if (_is_dot_or_dotdot(self, name)) {
+            continue;
+        }
 
-          if (rel_prefix && rel_prefix[0] != '\0') {
-              if (snprintf(relpath, sizeof(relpath), "%s\\%s",
-                           rel_prefix, name) < 0) {
-                  FindClose(hfind);
-                  return -1;
-              }
-          } else {
-              if (snprintf(relpath, sizeof(relpath), "%s", name) < 0) {
-                  FindClose(hfind);
-                  return -1;
-              }
-          }
+        if (rel_prefix && rel_prefix[0] != '\0') {
+            if (snprintf(relpath, sizeof(relpath), "%s\\%s", rel_prefix, name) < 0) {
+                FindClose(hfind);
+                return -1;
+            }
+        } else {
+            if (snprintf(relpath, sizeof(relpath), "%s", name) < 0) {
+                FindClose(hfind);
+                return -1;
+            }
+        }
 
-          /*
-           * No seguir enlaces/reparse points: evita ciclos durante
-           * la recursión y mantiene el archivo generado predecible.
+          /**
+           * Do not follow links or reparse points: this prevents recursion
+           * cycles and keeps the generated archive predictable.
            */
-          if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
-              fprintf(stderr, "Reparse point not supported: %s\n", relpath);
-              FindClose(hfind);
-              return -1;
-          }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            fprintf(stderr, "Reparse point not supported: %s\n", relpath);
+            FindClose(hfind);
+            return -1;
+        }
 
-          if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-              if (_walk_directory(self, base_path, relpath, ctx) != 0) {
-                  FindClose(hfind);
-                  return -1;
-              }
-          } else {
-              char fullpath[MAX_PATH];
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (_walk_directory(self, base_path, relpath, ctx) != 0) {
+                FindClose(hfind);
+                return -1;
+            }
+        } else {
+            char fullpath[MAX_PATH];
 
-              if (snprintf(fullpath, sizeof(fullpath), "%s\\%s",
-                           base_path, relpath) < 0) {
-                  FindClose(hfind);
-                  return -1;
-              }
+            if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", base_path, relpath) < 0) {
+                FindClose(hfind);
+                return -1;
+            }
 
-              if (_write_file_entry_to_lzma(
-                      self, relpath, fullpath, ctx->strm, ctx->outfile) != 0) {
-                  FindClose(hfind);
-                  return -1;
-              }
-          }
-      } while (FindNextFileA(hfind, &fd));
+            if (_write_file_entry_to_lzma(self, relpath, fullpath, ctx->strm, ctx->outfile) != 0) {
+                FindClose(hfind);
+                return -1;
+            }
+        }
+    } while (FindNextFileA(hfind, &fd));
 
-      DWORD error = GetLastError();
-      FindClose(hfind);
+    DWORD error = GetLastError();
+    FindClose(hfind);
 
-      if (error != ERROR_NO_MORE_FILES) {
-          fprintf(stderr, "FindNextFileA failed: %lu\n",
-                  (unsigned long)error);
-          return -1;
-      }
+    if (error != ERROR_NO_MORE_FILES) {
+        fprintf(stderr, "FindNextFileA failed: %lu\n", (unsigned long)error);
+        return -1;
+    }
 
-      return 0;
-  }
+    return 0;
+}
 
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
 
@@ -401,9 +405,9 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     if (pipe(pipefd) == -1) self->fatal("pipe");
     if (self->pid == -1) self->fatal("fork");   
     if (self->pid == 0) {
-      /*
-       * son process: execute tar -cf - -C <pernt_of_dir> <basename>
-       * redirect stdout of son process to the of write pipe 
+      /**
+       * Child process: execute `tar -cf - -C <parent_of_dir> <basename>`.
+       * Redirect its standard output to the write end of the pipe.
        */
         close(pipefd[0]);
         if (dup2(pipefd[1], STDOUT_FILENO) == -1) self->fatal("dup2");
@@ -727,7 +731,8 @@ Subject *new_subject(int value) {
     }
 
     #ifdef _WIN32
-        new->walk_directory =walk_directory;
+        new->walk_directory = walk_directory;
+        new->write_u32_le = _write_u32_le;
     #endif
     new->val = value;
     new->pid = 0;
