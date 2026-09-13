@@ -9,19 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### In progress
-- Started a private native Windows directory traversal based on
-  `FindFirstFileA` / `FindNextFileA`.
-- Started serialization of regular-file entries into the active LZMA stream
-  using little-endian route-length and file-size fields.
-- Reparse points are rejected during Windows traversal to avoid recursive
-  directory cycles.
-
 ### Known Issues
-- Windows saving is not connected to `_save_subject` yet.
-- Windows loading is not implemented.
-- The internal Windows entry format has no version, end marker, or compatible
-  extraction routine yet; it must not be treated as a stable archive format.
+- Neither platform's `load_subject` extracts the archive back into files on
+  disk: Linux returns the raw decompressed TAR stream, Windows returns the
+  raw decompressed entry stream; parsing/unpacking is not implemented on
+  either side yet.
+- `save_subject`/`load_subject` are not wired into `main.c`/the UI yet.
+- The internal Windows entry format has no magic value, version, or
+  end-of-archive marker yet; it must not be treated as a stable archive
+  format.
+- The Windows entry format records only regular files, so empty directories
+  cannot be restored.
 
 ### Planned
 - Implement CSS custom styles for widgets
@@ -32,6 +30,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.0.8] - 2026-09-13
+
+### Fixed
+- Fixed the Windows build, which did not compile at all before this version:
+  - Missing semicolon and an invalid duplicate/`static` member declaration in
+    the Windows section of the `Subject` struct (`include/subject.h`).
+  - `_walk_directory`'s forward declaration didn't match its definition
+    (missing the `Subject *self` parameter), causing a `conflicting types`
+    error.
+  - `include/subject.h` was not self-contained: it referenced `lzma_stream`
+    and `HANDLE` without including `<lzma.h>`/`<windows.h>` itself, relying on
+    `subject.c` having included them first. This broke any other translation
+    unit including the header directly, such as `main.c`. The header now
+    includes `<stdint.h>`, `<stdio.h>`, `<sys/types.h>`, and `<lzma.h>`
+    unconditionally, and `<windows.h>` under `_WIN32`.
+  - Replaced the non-portable `u_int32_t` with `uint32_t` in `write_u32_le`.
+  - `WalkContext`'s `outFile` field was referenced as `outfile` (wrong case)
+    in two places in `_walk_directory`.
+  - `Subject.pid` was a single `pid_t` field shared by both platforms, but
+    Windows process handles from the Win32 API are `HANDLE` (a pointer), not
+    a `pid_t`. Split into `proc_handle` (`HANDLE`, Windows) and `pid`
+    (`pid_t`, POSIX), and updated `_wait_pid_os_opt` and `new_subject`
+    accordingly.
+  - `new_subject`'s Windows branch referenced an undeclared `walk_directory`
+    identifier (missing the leading underscore) and left `is_dot_or_dotdot`
+    and `feed_bytes` unassigned.
+- Translated three Spanish-language strings/comments left in the Windows code
+  path to English (`_wait_pid_os_opt`'s two `fprintf` messages, and a comment
+  in `_load_subject`).
+
+### Added
+- Connected `is_dot_or_dotdot`, `write_u32_le`, `feed_bytes`, and
+  `walk_directory` as real methods on `Subject` for Windows: they are now
+  assigned in `new_subject` and invoked internally through `self->...(...)`
+  instead of calling the static functions directly.
+- Implemented `_save_subject` for Windows: opens the destination file,
+  initializes the LZMA encoder (preset `6 | LZMA_PRESET_EXTREME`, CRC64),
+  splits the source directory into `(parent, basename)` with `_fullpath`
+  (mirroring the Linux `tar -C parent basename` behavior so the archived
+  paths include the root directory name), walks the tree through
+  `walk_directory`/`feed_bytes`, and finishes the LZMA stream with
+  `LZMA_FINISH` so the `.xz` file's final blocks and index are written
+  (`walk_directory`/`feed_bytes` alone never finish the stream).
+- Implemented `_load_subject` for Windows: decompresses a full `.xz` file
+  into a heap-allocated buffer, functionally equivalent to the Linux
+  implementation, including a truncated-archive safety exit. Does not parse
+  the per-entry format written by `_save_subject` (see Known Issues).
+- `build/studystudio-0.0.8_win64.exe` now builds and links successfully
+  alongside the Linux target.
 
 ## [0.0.7] - 2026-08-27
 

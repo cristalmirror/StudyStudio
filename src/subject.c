@@ -43,14 +43,14 @@
 /* Returns -1 on API failure; optional status is 0 for success, 1 otherwise. */
 static int _wait_pid_os_opt(Subject *self, int *status) {
     #ifdef _WIN32
-        if (WaitForSingleObject(self->pid, INFINITE) == WAIT_FAILED) {
-            fprintf(stderr, "Error esperando: %lu\n", GetLastError());
+        if (WaitForSingleObject(self->proc_handle, INFINITE) == WAIT_FAILED) {
+            fprintf(stderr, "Error waiting: %lu\n", GetLastError());
             return -1;
         }
         if (status != NULL) {
             DWORD exit_code;
-            if (!GetExitCodeProcess(self->pid, &exit_code)) {
-                fprintf(stderr, "Error consultando salida: %lu\n", GetLastError());
+            if (!GetExitCodeProcess(self->proc_handle, &exit_code)) {
+                fprintf(stderr, "Error querying exit code: %lu\n", GetLastError());
                 return -1;
             }
             *status = (exit_code == 0) ? 0 : 1;
@@ -104,6 +104,100 @@ void _read_subject(Subject *self) {
  */
 
 int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
+    (void)self;
+
+    if (!path || !out_buf || !out_size) return -1;
+
+    *out_buf = NULL;
+    *out_size = 0;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) return -2;
+
+      lzma_stream strm = LZMA_STREAM_INIT;
+      lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
+      if (ret != LZMA_OK) {
+          fclose(f);
+          return -3;
+      }
+
+      uint8_t *inbuf = malloc(IN_BUF_SIZE);
+      uint8_t *outbuf = malloc(OUT_BUF_SIZE);
+      if (!inbuf || !outbuf) {
+          free(inbuf);
+          free(outbuf);
+          lzma_end(&strm);
+          fclose(f);
+          return -4;
+      }
+
+      uint8_t *acc = NULL;
+      size_t acc_size = 0;
+      size_t acc_cap = 0;
+
+      lzma_action action = LZMA_RUN;
+      strm.avail_in = 0;
+
+      do {
+          if (strm.avail_in == 0 && !feof(f)) {
+              size_t r = fread(inbuf, 1, IN_BUF_SIZE, f);
+              if (ferror(f)) {
+                  ret = LZMA_DATA_ERROR;
+                  break;
+              }
+              strm.next_in = inbuf;
+              strm.avail_in = r;
+              if (feof(f)) action = LZMA_FINISH;
+          }
+
+          strm.next_out = outbuf;
+          strm.avail_out = OUT_BUF_SIZE;
+
+          ret = lzma_code(&strm, action);
+
+          size_t produced = OUT_BUF_SIZE - strm.avail_out;
+          if (produced > 0) {
+              if (acc_size + produced > acc_cap) {
+                  size_t new_cap = acc_cap ? acc_cap * 2 : produced;
+                  while (new_cap < acc_size + produced) new_cap *= 2;
+                  uint8_t *tmp = realloc(acc, new_cap);
+                  if (!tmp) {
+                      ret = LZMA_MEM_ERROR;
+                      break;
+                  }
+                  acc = tmp;
+                  acc_cap = new_cap;
+              }
+              memcpy(acc + acc_size, outbuf, produced);
+              acc_size += produced;
+          }
+
+          if (ret == LZMA_STREAM_END) break;
+          if (ret != LZMA_OK) break;
+
+          /* Safety cutoff: EOF, no bytes pending and no progress ->
+           * the file is truncated and will never reach LZMA_STREAM_END. */
+          if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_BUF_SIZE)
+  break;
+
+      } while (1);
+
+      lzma_end(&strm);
+      free(inbuf);
+      free(outbuf);
+      fclose(f);
+
+      if (ret != LZMA_STREAM_END) {
+          free(acc);
+          if (ret == LZMA_MEM_ERROR) return -5;
+          if (ret == LZMA_FORMAT_ERROR) return -6;
+          if (ret == LZMA_DATA_ERROR) return -7;
+          return -8;
+      }
+
+      *out_buf = acc;
+      *out_size = acc_size;
+      return 0;
 
 }
 
@@ -204,9 +298,7 @@ static int _feed_bytes(lzma_stream *strm,
  * Write a input (header + content) to encoder: return 0 Ok.
  */
 static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const char *fullpath, lzma_stream *strm, FILE *outfile) {
-    (void)self;
-
-    if (!relpath || !fullpath || !strm || !outfile) {
+    if (!self || !relpath || !fullpath || !strm || !outfile) {
         return -1;
     }
 
@@ -265,11 +357,11 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
      * Implement a little funtion inline to feed bytes
      *  (repit code header and archive).
      */
-    if (_feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+    if (self->feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
                     length_header, sizeof(length_header)) != 0 ||
-        _feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+        self->feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
                     (const uint8_t *)relpath, relpath_size) != 0 ||
-        _feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+        self->feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
                     size_header, sizeof(size_header)) != 0) {
         fclose(f);
         return -1;
@@ -280,7 +372,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
      */
     size_t read_count;
     while ((read_count = fread(inbuf, 1, sizeof(inbuf), f)) > 0) {
-        if (_feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
+        if (self->feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
                         inbuf, read_count) != 0) {
             fclose(f);
             return -1;
@@ -298,16 +390,12 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
 }
 
 
-static int _walk_directory(
-    Subject *self,
-    const char *base_path,
-    const char *rel_prefix,
-    WalkContext *ctx) {
+static int _walk_directory(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx) {
     char search_path[MAX_PATH];
     WIN32_FIND_DATAA fd;
 
       /* comprube that parameters aren't NULL*/  
-    if (!self || !base_path || !ctx || !ctx->strm || !ctx->outfile) {
+    if (!self || !base_path || !ctx || !ctx->strm || !ctx->outFile) {
         return -1;
     }
 
@@ -321,6 +409,10 @@ static int _walk_directory(
         }
     }
 
+    /* 
+     * List the content in base_path
+     * (with )
+     */
     HANDLE hfind = FindFirstFileA(search_path, &fd);
     if (hfind == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
@@ -332,12 +424,12 @@ static int _walk_directory(
         fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
         return -1;
     }
-
+    /* Go to directory with . and .. by self->is_dot_or_dotdot in loop*/
     do {
         const char *name = fd.cFileName;
         char relpath[MAX_PATH];
 
-        if (_is_dot_or_dotdot(self, name)) {
+        if (self->is_dot_or_dotdot(self, name)) {
             continue;
         }
 
@@ -362,9 +454,9 @@ static int _walk_directory(
             FindClose(hfind);
             return -1;
         }
-
+        /* recursive call if the self directory */
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (_walk_directory(self, base_path, relpath, ctx) != 0) {
+            if (self->walk_directory(self, base_path, relpath, ctx) != 0) {
                 FindClose(hfind);
                 return -1;
             }
@@ -376,7 +468,7 @@ static int _walk_directory(
                 return -1;
             }
 
-            if (_write_file_entry_to_lzma(self, relpath, fullpath, ctx->strm, ctx->outfile) != 0) {
+            if (_write_file_entry_to_lzma(self, relpath, fullpath, ctx->strm, ctx->outFile) != 0) {
                 FindClose(hfind);
                 return -1;
             }
@@ -386,6 +478,7 @@ static int _walk_directory(
     DWORD error = GetLastError();
     FindClose(hfind);
 
+    /* Erro system message */
     if (error != ERROR_NO_MORE_FILES) {
         fprintf(stderr, "FindNextFileA failed: %lu\n", (unsigned long)error);
         return -1;
@@ -393,12 +486,116 @@ static int _walk_directory(
 
     return 0;
 }
-
+/* compres and save al archives and information */
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
+    (void)msg;
 
+    /* check that parameters isn't NULL */
+    if (!self || !dir || !*dir || !outpath) {
+        return;
+    }
+
+    /* Open file */
+    FILE *outf = fopen(*outpath, "wb");
+    if (!outf) {
+        fprintf(stderr,"fopen(%s) failed \n", *outpath);
+        return;
+    }
+
+    /*
+     * LZMA encoder maker
+     */
+    lzma_stream strm = LZMA_STREAM_INIT;
+    lzma_ret ret = lzma_easy_encoder(&strm, 6 | LZMA_PRESET_EXTREME, LZMA_CHECK_CRC64);
+    if (ret != LZMA_OK) {
+        fprintf(stderr, "lzma_easy_encoder failed: %d\n", ret);
+        fclose(outf);
+        return;
+    }
+
+    /*
+     * Is equivalece to "tar -C parent basename" of Linux side:
+     * waiting *dir in (parent, basename) to the name of the root
+     * directory was writed inside the archive.
+     */
+
+    char *dircopy = _fullpath(NULL, *dir, 0);
+    if (!dircopy) {
+        fprintf(stderr,"_fullpath(%s) filed\n", *dir);
+        lzma_end(&strm);
+        fclose(outf);
+        return;
+    }
+
+    char *last_slash = strrchr(dircopy, '\\');
+    char parent[MAX_PATH];
+    char base[MAX_PATH];
+
+    if (last_slash == NULL) {
+        snprintf(parent, sizeof(parent), ".");
+        snprintf(base, sizeof(base), "%s", dircopy);
+    } else if (last_slash == dircopy + 2 && dircopy[1] == ':') {
+        size_t root_len = (size_t)(last_slash - dircopy) + 1;
+        snprintf(parent, sizeof(parent), "%.*s",(int)root_len, dircopy);
+        snprintf(base, sizeof(base), "%s", last_slash + 1);
+    } else {
+        size_t p_len = (size_t)(last_slash - dircopy);
+        snprintf(parent, sizeof(parent), "%.*s",(int)p_len, dircopy);
+        snprintf(base, sizeof(base), "%s", last_slash + 1);
+    }
+
+    free(dircopy);
+
+    WalkContext ctx;
+    ctx.outFile = outf;
+    ctx.strm = &strm;
+
+    if (self->walk_directory(self, parent, base, &ctx) != 0) {
+        fprintf(stderr, "walk_directory faild for %s\n", *dir);
+        lzma_end(&strm);
+        fclose(outf);
+        return;
+    }
+
+    /*
+     * walk_directory / feed_bytes only use LZMA_RUN:
+     *
+     * they are releasing what they already have * compressed,
+     * but the stream is still "open".
+     * Here we close it with * LZMA_FINISH for XZ to write the
+     * final blocks + the index.
+     */
+
+    uint8_t outbuf[OUT_BUF_SIZE];
+    lzma_ret fret;
+    do {
+        strm.next_in = NULL;
+        strm.avail_in = 0;
+        strm.next_out = outbuf;
+        strm.avail_out = OUT_BUF_SIZE;
+
+        fret = lzma_code(&strm, LZMA_FINISH);
+        size_t wrote = OUT_BUF_SIZE - strm.avail_out;
+        if (wrote > 0 && fwrite(outbuf, 1, wrote, outf) != wrote) {
+            fprintf(stderr, "fwrite failed while finishing xz stream\n");
+            lzma_end(&strm);
+            fclose(outf);
+            return;
+        }
+    } while(fret == LZMA_OK);
+
+    lzma_end(&strm);
+    fclose(outf);
+
+    if (fret != LZMA_STREAM_END) {
+        fprintf(stderr, "lzma_code error while finishing: %d\n",(int)fret);
+        return;
+    }
+
+    printf("Maked %s\n", *outpath);
 }
 #else
-/*compres and save al archives and information*/
+/* compres and save al archives and information */
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
 
     int pipefd[2];
@@ -731,11 +928,15 @@ Subject *new_subject(int value) {
     }
 
     #ifdef _WIN32
-        new->walk_directory = walk_directory;
+        new->proc_handle = NULL;
+        new->is_dot_or_dotdot = _is_dot_or_dotdot;
         new->write_u32_le = _write_u32_le;
+        new->feed_bytes = _feed_bytes;
+        new->walk_directory = _walk_directory;
+    #else
+    new->pid = 0;
     #endif
     new->val = value;
-    new->pid = 0;
     new->wait_pid_os_opt = _wait_pid_os_opt;
     new->save_subject = _save_subject;
     new->read_subject = _read_subject;

@@ -6,6 +6,11 @@
 #ifndef SUBJECT_H
 #define SUBJECT_H
 
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <lzma.h>
+
 /*input & output buffer size*/
 #define IN_BUF_SIZE 65536
 #define OUT_BUF_SIZE 65536
@@ -13,8 +18,11 @@
 #define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE
 
+typedef struct Subject Subject;
+
 #ifdef _WIN32 //windows flags, structs and machro
     #define _CRT_SECURE_NO_WARNINGS
+    #include <windows.h>
     typedef struct WalkContext WalkContext;
     /*
      * Recursive route: write file be file to encoder.
@@ -27,24 +35,21 @@
     };
 
     //Foward
-    static int _walk_directory(const char *base_path, const char *rel_prefix, WalkContext *ctx);
+    static int _walk_directory(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx);
 #endif
-
-typedef struct Subject Subject;
 
 struct Subject {
     int val;
-    pid_t pid;
-    #ifdef _WIN32
-        int (*is_dot_or_dotdot)(Subject *self, const char *name)
-        int (*write_u32_le)(Subject *self, FILE *f, u_int32_t v);
-        static int (*_is_dot_or_dotdot)(Subject *self, const char *name);
-        int (*feed_bytes)(lzma_stream *strm,
-                      uint8_t *outbuf, size_t out_buf_size,
-                      FILE *outfile,
-                      const uint8_t *data, size_t len);
-        int (*walk_directory)(const char *base_path, const char *rel_prefix, WalkContext *ctx);
 
+    #ifdef _WIN32
+        HANDLE proc_handle;
+        int (*is_dot_or_dotdot)(Subject *self, const char *name);
+        int (*write_u32_le)(Subject *self, FILE *f, uint32_t v);
+        int (*feed_bytes)(lzma_stream *strm, uint8_t *outbuf, size_t out_buf_size, FILE *outfile, const uint8_t *data, size_t len);
+        int (*walk_directory)(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx);
+
+    #else
+        pid_t pid;
     #endif
     void (*fatal)(const char *msg);
     void (*read_subject)(Subject *self);

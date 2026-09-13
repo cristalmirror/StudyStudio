@@ -1,16 +1,16 @@
 # `Makefile`
 
-Status: draft for user approval; version 0.0.7.
+Status: draft for user approval; version 0.0.8.
 
 ## Purpose
 
-Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.0.7`.
+Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.0.8`.
 
 | Target | Behavior |
 | --- | --- |
 | `all` | Requests both Linux and Windows builds; default target. |
-| `linux` | Builds `build/studystudio-0.0.7_linux` with GCC. |
-| `win64` | Builds `build/studystudio-0.0.7_win64.exe` with MinGW-w64. |
+| `linux` | Builds `build/studystudio-0.0.8_linux` with GCC. |
+| `win64` | Builds `build/studystudio-0.0.8_win64.exe` with MinGW-w64. |
 | `setup` | Creates platform object directories. |
 | `clean` | Deletes `build` and the root-level `resources.c`. |
 
@@ -25,7 +25,7 @@ Use `make linux`, `make win64`, or `make all` inside an environment with the req
 - Source discovery is limited to C files directly inside `src`; future nested modules require updated rules.
 - `HEADERS` uses `include/.h` rather than `include/*.h` and is not used as a prerequisite. Header changes alone do not reliably rebuild dependent objects.
 - There is no test target or compiler-generated header dependency tracking.
-- The subject implementation still contains unguarded POSIX process calls, affecting the Windows target.
+- As of version 0.0.8 both `linux` and `win64` build and link successfully; `include/subject.h` now guards its Windows/POSIX-specific fields and includes correctly, so `subject.c` compiles cleanly on both targets. See [subject.h](subject.h.md) and [subject.c](subject.c.md) for the remaining implementation limitations.
 
 ## SOLID development direction
 
