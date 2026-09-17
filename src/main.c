@@ -3,7 +3,8 @@
 
 /*this structure save the state of application*/
 typedef struct {
-    GtkWidget *destiny_content; //save the element 
+    GtkWidget *destiny_content; //save the element
+    GtkWidget *window; 
     int counter; //number of element(index)
 } AppState;
 
@@ -44,15 +45,46 @@ static void on_load_clicked(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = (AppState *)user_data;
 
-    g_print("Cargar Materia (contador actual: %d)",state->counter);
-    /*
-      all here can open the archive using
-     */
-    Subject *mat1 = new_subject(2);
-    if (mat1 != NULL) {
-        mat1->read_subject(mat1);
-        mat1->close_subject(mat1);
+    GtkFileChooserNative *dialog = gtk_file_chooser_native_new(
+        "Cargar Materia",
+        GTK_WINDOW(state->window),
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Abrir", "_Cancelar"
+    );
+
+    g_signal_connect(dialog,"respose",G_CALLBACK(on_load_dialog_resose), state);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
+}
+
+/*load the file or folder, in a subject instance */
+static void on_load_dialog_respose(GtkNativeDialog *dialog, int respose, gpointer user_data) {
+    AppState *state = (AppState *)user_data;
+
+    /* file manipulations */
+    if (respose == GTK_RESPONSE_ACCEPT) {
+        GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
+        char *paht = g_file_path(file);
+    
+
+        Subject *mat = new_subject(state->counter);
+        if (mat != NULL) {
+            uint8_t *buf = NULL;
+            size_t size = 0;
+            int rc = mat->load_subject(mat,path,&buf,&size);
+
+            if (rc == 0) {
+                g_print("Cargados %zu bytes desde %s",size,path);
+                free(buf); 
+            } else {
+                g_print("Error al cargar (%d): %s\n",rc,path);
+            }
+            mat->close_subject(mat);
+    
+        }
+        g_free(path);
+        g_object_unref(file);
     }
+    g_object_unref(dialog);
 }
 
 /*
