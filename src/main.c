@@ -8,6 +8,10 @@ typedef struct {
     int counter; //number of element(index)
 } AppState;
 
+
+/* Declarations: */
+static void on_load_dialog_respose(GtkNativeDialog *dialog, int response, gpointer user_data);
+
 /*
   function that execute when you press everywere the buttons
 */
@@ -52,7 +56,7 @@ static void on_load_clicked(GtkButton *button, gpointer user_data) {
         "_Abrir", "_Cancelar"
     );
 
-    g_signal_connect(dialog,"respose",G_CALLBACK(on_load_dialog_resose), state);
+    g_signal_connect(dialog,"response",G_CALLBACK(on_load_dialog_respose), state);
     gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
 }
 
@@ -63,7 +67,7 @@ static void on_load_dialog_respose(GtkNativeDialog *dialog, int respose, gpointe
     /* file manipulations */
     if (respose == GTK_RESPONSE_ACCEPT) {
         GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
-        char *paht = g_file_path(file);
+        char *path = g_file_get_path(file);
     
 
         Subject *mat = new_subject(state->counter);
@@ -93,7 +97,7 @@ static void on_load_dialog_respose(GtkNativeDialog *dialog, int respose, gpointe
 static void activate(GtkApplication *app, gpointer user_data) {
     GtkWidget *window, *add_button, *load_button, *target_box;
     GtkBuilder *builder;
-
+    (void)user_data;
     // Load the XML archive
     builder = gtk_builder_new_from_resource("/org/studystudio/interface.ui");
 

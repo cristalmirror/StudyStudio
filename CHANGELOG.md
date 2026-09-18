@@ -31,6 +31,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
 
+## [0.0.9] - 2026-09-17
+
+### Fixed
+- `src/main.c` did not compile: `on_load_clicked` passed a misspelled signal
+  name (`"respose"` instead of `"response"`) and an undeclared, misspelled
+  callback identifier (`on_load_dialog_resose` instead of
+  `on_load_dialog_respose`) to `g_signal_connect`. Corrected both, and added a
+  forward declaration for `on_load_dialog_respose` above `on_load_clicked`
+  since the callback is referenced before its definition later in the file.
+- `on_load_dialog_respose` called `g_file_path()`, which does not exist in
+  GLib/GIO, and stored the result in a variable named `paht` while the rest of
+  the function referenced `path`, leaving `path` undeclared. Replaced with
+  `g_file_get_path(file)` assigned to `path`.
+- Removed a stray `static int _walk_directory(...)` forward declaration from
+  `include/subject.h` (Windows section). `_walk_directory` is a private
+  implementation detail already defined in `src/subject.c`, but the
+  declaration in the shared header caused every other translation unit that
+  includes `subject.h` and does not define/use the function itself — namely
+  `main.c` on the Windows build — to see a `static` function that is declared
+  but never defined or used there, triggering a `-Wunused-function`-class
+  warning. `subject.c` never needed this declaration in the first place: it
+  defines `_walk_directory` before its only use (`new_subject`'s Windows
+  branch).
+- Silenced the `-Wunused-parameter` warning on `activate`'s `user_data` with
+  `(void)user_data;`, matching the pattern already used in the other
+  callbacks.
+
+### Changed
+- Bumped the project version to `0.0.9`: `Makefile`'s `NAME` and the window
+  title in `interface.ui` (which had been left at a stale `StudyStudio-0.0.7`
+  since before the 0.0.8 release) now both read `0.0.9`.
+
 ## [0.0.8] - 2026-09-13
 
 ### Fixed

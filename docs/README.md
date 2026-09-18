@@ -1,8 +1,8 @@
 # StudyStudio documentation
 
-Status: draft for user approval. Baseline: source code reviewed at version 0.0.8.
+Status: draft for user approval. Baseline: source code reviewed at version 0.0.9.
 
-StudyStudio is an early-stage desktop application written in C with GTK4. Its current UI adds numbered buttons and demonstrates construction of a subject object. Archive compression and decompression exist in the source but are not connected to the UI.
+StudyStudio is an early-stage desktop application written in C with GTK4. Its current UI adds numbered buttons and can load a `.xz` subject archive through a file chooser, decoding it with `load_subject` and reporting the decoded byte count. Archive compression exists in the source but `save_subject` is not yet connected to the UI, and loading does not unpack the decoded bytes into files (see [main.c](main.c.md)).
 
 ## File documentation
 
@@ -21,7 +21,7 @@ Each C source/header has its own document. UI resources and build configuration 
 
 ## Development direction: SOLID
 
-**From this point onward, new development and refactoring must follow SOLID principles.** This is the project's agreed development direction, not a claim that version 0.0.8 already satisfies every principle. Apply these principles through C modules, opaque types, and small operation tables where substitution is useful; a different language or a class hierarchy is not required.
+**From this point onward, new development and refactoring must follow SOLID principles.** This is the project's agreed development direction, not a claim that version 0.0.9 already satisfies every principle. Apply these principles through C modules, opaque types, and small operation tables where substitution is useful; a different language or a class hierarchy is not required.
 
 | Principle | Project guideline |
 | --- | --- |

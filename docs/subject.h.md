@@ -1,6 +1,6 @@
 # `include/subject.h`
 
-Status: draft for user approval; version 0.0.8.
+Status: draft for user approval; version 0.0.9.
 
 ## Purpose
 
@@ -19,6 +19,14 @@ The Windows archive traversal helpers are deliberately not part of the public
 directly. `WalkContext` is a private implementation detail of `src/subject.c`
 used only to carry the output file and the active LZMA stream through the
 recursive walk.
+
+As of this version, `_walk_directory` itself is no longer forward-declared in
+this header. It never needed to be: `src/subject.c` defines it before its
+only use (`new_subject`'s Windows branch), and the declaration's only real
+effect was leaking a private, `static` implementation detail into every other
+translation unit that includes `subject.h` — including `main.c` on the
+Windows build, which does not define or call it, and so saw it flagged as
+declared but never defined.
 
 ## Current interface
 

@@ -34,8 +34,7 @@ typedef struct Subject Subject;
         lzma_stream *strm;
     };
 
-    //Foward
-    static int _walk_directory(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx);
+    
 #endif
 
 struct Subject {

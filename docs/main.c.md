@@ -1,6 +1,6 @@
 # `src/main.c`
 
-Status: draft for user approval; version 0.0.7.
+Status: draft for user approval; version 0.0.9.
 
 ## Purpose and dependencies
 
@@ -15,13 +15,14 @@ Starts the GTK4 application, loads the embedded interface, and connects UI event
 | `activate` | Loads the builder resource, retrieves widgets, associates the window with the application, allocates state, connects signals, and presents the window. |
 | `on_add_clicked` | Increments the counter and appends a button labeled `Materia Num #N`. |
 | `on_subject_clicked` | Prints the clicked button's label. |
-| `on_load_clicked` | Prints the counter, creates `new_subject(2)`, prints its value through `read_subject`, and destroys it. |
+| `on_load_clicked` | Opens a `GtkFileChooserNative` ("Cargar Materia") and connects `on_load_dialog_respose` to its `"response"` signal. A forward declaration above `on_load_clicked` makes the callback visible before its definition later in the file. |
+| `on_load_dialog_respose` | On `GTK_RESPONSE_ACCEPT`, resolves the chosen `GFile` to a local path with `g_file_get_path`, constructs a throwaway `Subject` with `new_subject(state->counter)`, and calls `mat->load_subject(mat, path, &buf, &size)`. Prints either the decoded byte count or the numeric error code, frees the decoded buffer and the path string, and destroys the temporary subject. |
 
-The load button is a demonstration: it does not open a file or invoke `load_subject`. Added buttons do not currently represent persisted subject objects.
+Added buttons do not currently represent persisted subject objects, and the object constructed in `on_load_dialog_respose` only exists to call `load_subject`; it does not become part of the UI state (`state->counter` is not tied to the loaded subject in any way). `load_subject` returns the raw decompressed bytes (see [subject.c](subject.c.md)); this callback does not unpack them into files, so loading currently only proves the file could be decoded.
 
 ## Ownership and limitations
 
-Temporary label strings are freed after widget creation. The builder and application references are released. The temporary subject is destroyed if construction succeeds. `AppState` is heap allocated, but no cleanup is registered. Builder objects are used without explicit checks for missing IDs.
+Temporary label strings are freed after widget creation. The builder and application references are released. The temporary subject in `on_load_dialog_respose` is destroyed after use, and its decoded buffer is freed once printed. `AppState` is heap allocated, but no cleanup is registered. Builder objects are used without explicit checks for missing IDs.
 
 ## SOLID development direction
 
