@@ -1,6 +1,6 @@
 # `src/main.c`
 
-Status: draft for user approval; version 0.0.10.
+Status: draft for user approval; version 0.0.11.
 
 ## Purpose and dependencies
 
@@ -18,7 +18,7 @@ Starts the GTK4 application, loads the embedded interface, and connects UI event
 | `on_load_clicked` | Opens a `GtkFileChooserNative` ("Cargar Materia") and connects `on_load_dialog_respose` to its `"response"` signal. A forward declaration above `on_load_clicked` makes the callback visible before its definition later in the file. |
 | `on_load_dialog_respose` | On `GTK_RESPONSE_ACCEPT`, resolves the chosen `GFile` to a local path with `g_file_get_path`, constructs a throwaway `Subject` with `new_subject(state->counter)`, and calls `mat->load_subject(mat, path, &buf, &size)`. Prints either the decoded byte count or the numeric error code, frees the decoded buffer and the path string, and destroys the temporary subject. |
 
-Added buttons do not currently represent persisted subject objects, and the object constructed in `on_load_dialog_respose` only exists to call `load_subject`; it does not become part of the UI state (`state->counter` is not tied to the loaded subject in any way). `load_subject` returns the raw decompressed bytes (see [subject.c](subject.c.md)); this callback does not unpack them into files, so loading currently only proves the file could be decoded.
+Added buttons do not currently represent persisted subject objects, and the object constructed in `on_load_dialog_respose` only exists to call `load_subject`; it does not become part of the UI state (`state->counter` is not tied to the loaded subject in any way). `load_subject` returns the raw decompressed bytes (see [subject.c](subject.c.md)); this callback itself still only prints the byte count or the numeric error code and frees the buffer. On Linux, though, `load_subject` now also unpacks the decoded archive to disk as an internal side effect (writing files under a directory derived from the archive's name), so clicking "Load Subject" already extracts real files even though this callback was not changed to do anything with that side effect or report it. The Windows build of the equivalent extraction path does not currently compile (see [subject.c](subject.c.md#extraction)), so this behavior is Linux-only for now. A new `-9` error code from `load_subject` (extraction failure after a successful decode) is printed the same way as any other numeric error code, without a specific message.
 
 ## Ownership and limitations
 

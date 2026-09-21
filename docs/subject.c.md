@@ -1,15 +1,16 @@
 # `src/subject.c`
 
-Status: draft for user approval; version 0.0.10.
+Status: draft for user approval; version 0.0.11.
 
 ## Purpose and dependencies
 
 Implements subject construction/destruction, diagnostic output, process waiting,
-and XZ archive handling through liblzma. Linux archives directories with
-external `tar`; Windows uses a native directory traversal and a custom entry
-serializer, with no dependency on `tar`. The file opens with a standard header
-comment (developer, repository, version, license, edit date), kept above the
-existing purpose comment.
+and XZ archive handling through liblzma. Linux archives and unpacks directories
+with external `tar` (`tar -cf`/`tar -xf` through a pipe, in either direction);
+Windows uses a native directory traversal and a custom entry serializer for
+both directions, with no dependency on `tar`. The file opens with a standard
+header comment (developer, repository, version, license, edit date), kept
+above the existing purpose comment.
 
 ## Lifecycle and helper operations
 
@@ -87,15 +88,17 @@ either, matching the Linux side.
 
 ## Loading
 
-`_load_subject(self, path, out_buf, out_size)` reads an XZ file, decodes it with concatenated streams enabled, and accumulates decompressed bytes in a dynamically allocated buffer. `self` is unused. This operation does not extract TAR entries (Linux) or per-entry archive records (Windows), nor construct a subject from the decoded bytes.
+`_load_subject(self, path, out_buf, out_size)` reads an XZ file, decodes it with concatenated streams enabled, and accumulates decompressed bytes in a dynamically allocated buffer, same as before. On Linux, `self` is used now: after decoding, it derives an extraction directory next to the archive (`_derive_extract_dir`) and feeds the decoded TAR bytes to `tar -xf -` through a pipe (`_unpack_tar_buffer`), writing real files to disk as a side effect before returning. `out_buf`/`out_size` still carry the full decoded buffer, unchanged; the extraction is additional, not a replacement for it. `main.c` was not modified, so this side effect now happens automatically the next time `on_load_dialog_respose` calls `load_subject` on Linux (see [main.c](main.c.md)).
 
 As of version 0.0.8, Windows has its own native `_load_subject`, functionally
-equivalent to the Linux one: it decompresses the full `.xz` file into a single
+equivalent to the Linux one for decoding: it decompresses the full `.xz` file into a single
 heap-allocated buffer with `lzma_stream_decoder`, growing the accumulator
 geometrically, and includes a safety exit for a truncated stream that never
-reaches `LZMA_STREAM_END`. It does not parse the `length + path + size +
-content` records written by `_save_subject`; unpacking that format into
-individual files is not implemented on either platform yet.
+reaches `LZMA_STREAM_END`. It now also attempts to parse the `length + path +
+size + content` records written by `_save_subject` and write them to disk
+(`_derive_extract_dir` + `_unpack_windows_buffer`, mirroring the Linux wiring),
+but as written this does not compile on Windows (see
+[Extraction](#extraction) below), so this path remains unverified.
 
 For valid output pointers, output values are initialized to `NULL` and zero before opening the file. On success, the caller owns the returned buffer and must use `free` after consumption. Inputs and path strings remain caller-owned.
 
@@ -109,32 +112,46 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 | `-6` | XZ format error. |
 | `-7` | Data error, also used for an input read failure. |
 | `-8` | Other decoder error. |
+| `-9` | Decoding succeeded, but deriving the extraction directory or unpacking to disk failed. `*out_buf`/`*out_size` are still assigned at this point; the caller still owns a valid decoded buffer even though extraction failed. |
 
-These return codes describe the current implementation, not a complete or reliable error contract for every failure path. The Windows implementation returns the same codes for the same conditions; it does not introduce Windows-specific ones.
+These return codes describe the current implementation, not a complete or reliable error contract for every failure path. The Windows implementation returns the same codes for the same conditions, plus the same new `-9` for its own (currently non-compiling) unpacking attempt.
 
-## Extraction (in progress)
+## Extraction
 
-Both platforms have a new private helper, `_derive_extract_dir(path, dest_dir, dest_dir_size)`, added as groundwork for making `_load_subject` unpack its decoded bytes into real files instead of only returning them in memory (see [Loading](#loading) and [prototype_ia.md](prototype_ia.md) for the full design this is based on). It is not called from `_load_subject` yet, and does not compile as currently written on either platform (see below).
+Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolving the archive path to an absolute path (`_fullpath` on Windows, `realpath` on Linux), taking its last path component, and dropping everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped. See [prototype_ia.md](prototype_ia.md) for the full design this is based on.
 
-Intended behavior, mirroring `_save_subject`'s directory/basename split: resolve the archive path to an absolute path (`_fullpath` on Windows, `realpath` on Linux), take its last path component, and drop everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped.
+### Linux: compiles and is wired in
 
-Current defects (source review only, not yet built):
+The Linux `_derive_extract_dir` no longer has the defects from the previous review (`strrchr`/`snprintf` typos, missing `static int` return type all fixed) and now reads correctly. A new helper, `_unpack_tar_buffer(self, buf, size, dest_dir)`, `mkdir`s the destination and forks `tar -xf - -C <dest_dir>`, writing the decoded TAR bytes to it through a pipe — the load-side mirror of the existing `tar -cf -` save path. `_load_subject` calls both after a successful decode (see [Loading](#loading)); this is the only extraction path currently expected to compile and run.
 
-- Windows: `strrchr(base, sizeof(base), "%s", '.')` passes four arguments to `strrchr`, which takes two (`const char *`, `int`); this does not compile. It should read `strrchr(base, '.')`.
-- Linux: `strrchar(full, '/')` — `strrchar` does not exist; this should be `strrchr`.
-- Linux: `snpritf(dest_dir, dest_dir_size, ...)` — `snpritf` does not exist; this should be `snprintf`.
-- Linux: the function definition omits a return type (`static _derive_extract_dir(...)` instead of `static int _derive_extract_dir(...)`), relying on implicit `int`.
+### Windows: still does not compile
 
-Fixed since the previous review: the Linux truncation check now reads `(size_t) n >= dest_dir_size`, correctly treating an `snprintf` result equal to the buffer size (output truncated, no room for the terminator) as failure instead of success.
+`_derive_extract_dir` still has the previously documented defect: `strrchr(base, sizeof(base), "%s", '.')` passes four arguments to `strrchr`, which takes two (`const char *`, `int`); this does not compile. It should read `strrchr(base, '.')`.
+
+A new helper, `_unpack_windows_buffer(self, buf, size, dest_dir)`, parses the `length + path + size + content` records written by `_save_subject` and writes each one to disk (creating intermediate subfolders with `_win_mkdir_p`). It has its own new defect: `fprintf(stderrm "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());` is missing the comma after `stderr` and instead runs it together into a single, undeclared identifier `stderrm`; this does not compile. It should read `fprintf(stderr, "CreateDirectoryA(%s) failed: %lu\n", ...)`.
+
+Both defects mean the Windows build of `_load_subject` will not compile as currently written, even though it is now wired the same way as the Linux side.
 
 ## Known implementation limitations
 
-- Windows saving and loading now run natively (no `tar` dependency), but
-  neither platform's `_load_subject` parses the per-entry archive format back
-  into individual files, and neither `_save_subject` nor `_load_subject` is
-  wired into `main.c`/the UI yet.
+- Windows saving and loading now run natively (no `tar` dependency). On
+  Linux, `_load_subject` now unpacks the decoded TAR bytes back into
+  individual files/directories through `_unpack_tar_buffer` (see
+  [Extraction](#extraction)); the equivalent Windows unpacking
+  (`_unpack_windows_buffer`) is wired the same way but does not compile yet.
+  Neither `_save_subject` nor `_load_subject` is explicitly wired into
+  `main.c`/the UI, but since `main.c` already calls `load_subject`, the
+  Linux extraction now runs as a side effect of the existing "Load Subject"
+  button (see [main.c](main.c.md)).
 - The Windows entry format currently records only files, so empty directories
   cannot be restored.
+- Linux only, pre-existing and not previously documented here: in
+  `_load_subject`, `uint8_t *acc = LZMA_RUN;` initializes the decode
+  accumulator with the `lzma_action` enum constant (value `0`) instead of
+  `NULL`. This happens to work because `0` is a valid null pointer constant
+  in C and `LZMA_RUN` is guaranteed to be `0` by the liblzma API, but it is
+  confusing to read and fragile if that guarantee ever changed. It should
+  read `uint8_t *acc = NULL;`.
 - `MAX_PATH` and `FindFirstFileA` limit Windows paths and do not provide full
   Unicode-path support.
 - Windows only: `_save_subject`'s parent/basename split does not handle a

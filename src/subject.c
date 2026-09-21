@@ -1,7 +1,7 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.0.10
+ * Version: 0.0.11
  * License: GPLv3
  * Last edited: 2026-09-20
  */
@@ -112,7 +112,98 @@ void _read_subject(Subject *self) {
  * here.
  */
 
+/*
+ *     ------------- SO IMPORTANT!!! -------------- 
+ * The next functions are part important and necesary to
+ * _load_subject run correcty and do the decompress 
+ */
+static uint32_t _read_u32_le(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
 
+static uint64_t _read_u64_le(const uint8_t *p) {
+    uint64_t v = 0;
+    for (int i = 0; i < 8; i++) v |= ((uint64_t)p[i]) << (8 * i);
+    return v;
+}
+
+/*
+ * Helper to create intermediate subfolders
+ * (a `relpath` can come as `notas\semana1\archivo.txt`)
+ */
+static int _win_mkdir_p(const char *dir_path) {
+    char tmp[MAX_PATH];
+    snprintf(tmp, sizeof(tmp), "%s", dir_path);
+
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '\\') {
+            *p = '\0';
+            if(!CreateDirectoryA(tmp, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) return -1;
+            *p = '\\';
+        }
+    }
+    return (!CreateDirectoryA(tmp, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) ? -1 : 0;
+}
+
+static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size, const char *dest_dir) {
+    (void)self;
+    size_t offset = 0;
+
+    if (!CreateDirectoryA(dest_dir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+        fprintf(stderrm "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
+        return -1;
+    }
+
+    while (offset < size) {
+        if (offset + 4 > size) {
+            fprintf(stderr, "truncated archive: length header\n");
+            return -1;
+        }
+        uint32_t rel_len = _read_u32_le(buf + offset);
+        offset += 4;
+        
+        if (rel_len == 0 || rel_len >= MAX_PATH || offset + rel_len > size) {
+            fprintf(stderr,"truncated or invalid relpath\n");
+            return -1;
+        }
+        char relpath[MAX_PATH];
+        memcpy(relpath, buf + offset, rel_len);
+        relpath[rel_len] = '\0';
+        offset += rel_len;
+
+        if (offset + 8 > size) { fprintf(stderr, "truncated archive: size header\n"); return -1; }
+        uint64_t filesize = _read_u64_le(buf + offset);
+        offset += 8;
+
+        if (offset + filesize > size) { fprintf(stderr, "truncated archive: content\n"); return -1; }
+
+        char fullpath[MAX_PATH];
+        if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", dest_dir, relpath) < 0) return -1;
+
+        char *last_slash = strrchr(fullpath, '\\');
+        if (last_slash != NULL) {
+            char parent[MAX_PATH];
+            snprintf(parent, sizeof(parent), "%.*s", (int)(last_slash - fullpath), fullpath);
+            if (_win_mkdir_p(parent) != 0) {
+                fprintf(stderr, "mkdir(%s) failed\n", parent);
+                return -1;
+            }
+        }
+
+        FILE *out = fopen(fullpath, "wb");
+        if (!out) { fprintf(stderr, "fopen(%s) failed\n", fullpath); return -1; }
+        if (filesize > 0 && fwrite(buf + offset, 1, (size_t)filesize, out) != (size_t)filesize) {
+            fprintf(stderr, "fwrite(%s) failed\n", fullpath);
+            fclose(out);
+            return -1;
+        }
+        fclose(out);
+        offset += filesize;
+    }
+    return 0;
+    
+}
 
  /*
   * Make the name of the restul of decompress the folder or archive
@@ -153,90 +244,97 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     FILE *f = fopen(path, "rb");
     if (!f) return -2;
 
-      lzma_stream strm = LZMA_STREAM_INIT;
-      lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
-      if (ret != LZMA_OK) {
-          fclose(f);
-          return -3;
-      }
+        lzma_stream strm = LZMA_STREAM_INIT;
+        lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
+        if (ret != LZMA_OK) {
+            fclose(f);
+            return -3;
+        }
 
-      uint8_t *inbuf = malloc(IN_BUF_SIZE);
-      uint8_t *outbuf = malloc(OUT_BUF_SIZE);
-      if (!inbuf || !outbuf) {
-          free(inbuf);
-          free(outbuf);
-          lzma_end(&strm);
-          fclose(f);
-          return -4;
-      }
+        uint8_t *inbuf = malloc(IN_BUF_SIZE);
+        uint8_t *outbuf = malloc(OUT_BUF_SIZE);
+        if (!inbuf || !outbuf) {
+            free(inbuf);
+            free(outbuf);
+            lzma_end(&strm);
+            fclose(f);
+            return -4;
+        }
 
-      uint8_t *acc = NULL;
-      size_t acc_size = 0;
-      size_t acc_cap = 0;
+        uint8_t *acc = NULL;
+        size_t acc_size = 0;
+        size_t acc_cap = 0;
 
-      lzma_action action = LZMA_RUN;
-      strm.avail_in = 0;
+        lzma_action action = LZMA_RUN;
+        strm.avail_in = 0;
 
-      do {
-          if (strm.avail_in == 0 && !feof(f)) {
-              size_t r = fread(inbuf, 1, IN_BUF_SIZE, f);
-              if (ferror(f)) {
-                  ret = LZMA_DATA_ERROR;
-                  break;
-              }
-              strm.next_in = inbuf;
-              strm.avail_in = r;
-              if (feof(f)) action = LZMA_FINISH;
-          }
+        do {
+            if (strm.avail_in == 0 && !feof(f)) {
+                size_t r = fread(inbuf, 1, IN_BUF_SIZE, f);
+                if (ferror(f)) {
+                    ret = LZMA_DATA_ERROR;
+                    break;
+                }
+                strm.next_in = inbuf;
+                strm.avail_in = r;
+                if (feof(f)) action = LZMA_FINISH;
+            }
 
-          strm.next_out = outbuf;
-          strm.avail_out = OUT_BUF_SIZE;
+            strm.next_out = outbuf;
+            strm.avail_out = OUT_BUF_SIZE;
 
-          ret = lzma_code(&strm, action);
+            ret = lzma_code(&strm, action);
 
-          size_t produced = OUT_BUF_SIZE - strm.avail_out;
-          if (produced > 0) {
-              if (acc_size + produced > acc_cap) {
-                  size_t new_cap = acc_cap ? acc_cap * 2 : produced;
-                  while (new_cap < acc_size + produced) new_cap *= 2;
-                  uint8_t *tmp = realloc(acc, new_cap);
-                  if (!tmp) {
-                      ret = LZMA_MEM_ERROR;
-                      break;
-                  }
-                  acc = tmp;
-                  acc_cap = new_cap;
-              }
-              memcpy(acc + acc_size, outbuf, produced);
-              acc_size += produced;
-          }
+            size_t produced = OUT_BUF_SIZE - strm.avail_out;
+            if (produced > 0) {
+                  if (acc_size + produced > acc_cap) {
+                    size_t new_cap = acc_cap ? acc_cap * 2 : produced;
+                    while (new_cap < acc_size + produced) new_cap *= 2;
+                    uint8_t *tmp = realloc(acc, new_cap);
+                    if (!tmp) {
+                        ret = LZMA_MEM_ERROR;
+                        break;
+                    }
+                    acc = tmp;
+                    acc_cap = new_cap;
+                }
+                memcpy(acc + acc_size, outbuf, produced);
+                acc_size += produced;
+            }
 
-          if (ret == LZMA_STREAM_END) break;
-          if (ret != LZMA_OK) break;
+            if (ret == LZMA_STREAM_END) break;
+            if (ret != LZMA_OK) break;
 
-          /* Safety cutoff: EOF, no bytes pending and no progress ->
-           * the file is truncated and will never reach LZMA_STREAM_END. */
-          if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_BUF_SIZE)
-  break;
+            /* Safety cutoff: EOF, no bytes pending and no progress ->
+            * the file is truncated and will never reach LZMA_STREAM_END. */
+            if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_BUF_SIZE)
+    break;
 
-      } while (1);
+    } while (1);
 
-      lzma_end(&strm);
-      free(inbuf);
-      free(outbuf);
-      fclose(f);
+    lzma_end(&strm);
+    free(inbuf);
+    free(outbuf);
+    fclose(f);
 
-      if (ret != LZMA_STREAM_END) {
-          free(acc);
-          if (ret == LZMA_MEM_ERROR) return -5;
-          if (ret == LZMA_FORMAT_ERROR) return -6;
-          if (ret == LZMA_DATA_ERROR) return -7;
-          return -8;
-      }
+    if (ret != LZMA_STREAM_END) {
+        free(acc);
+        if (ret == LZMA_MEM_ERROR) return -5;
+        if (ret == LZMA_FORMAT_ERROR) return -6;
+        if (ret == LZMA_DATA_ERROR) return -7;
+        return -8;
+    }
 
-      *out_buf = acc;
-      *out_size = acc_size;
-      return 0;
+    *out_buf = acc;
+    *out_size = acc_size;
+    /* implementation of Windows dirrectory factory and decompress result. */
+    char dest_dir[MAX_PATH];
+    if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
+        _unpack_windows_buffer(self, acc, acc_size, dest_dir) != 0) {
+        fprintf(stderr, "failed to unpack %s\n", path);
+        return -9;
+    }
+    return 0;
 
 }
 
@@ -806,11 +904,11 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
   * Make the name of the restul of decompress the folder or archive
   * with the same name of the original archive tar.xz compress
   */
-static _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
+static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
     char *full = realpath(path, NULL);
     if (!full) return -1;
 
-    char *last_slash = strrchar(full,'/');
+    char *last_slash = strrchr(full,'/');
     char base[PATH_MAX];
     snprintf(base,sizeof(base), "%s", last_slash ? last_slash + 1 : full);
 
@@ -818,12 +916,58 @@ static _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_siz
     if (dot != NULL && dot != base) *dot = '\0';
 
     int n = last_slash
-        ? snpritf(dest_dir, dest_dir_size, "%.*s/%s",
+        ? snprintf(dest_dir, dest_dir_size, "%.*s/%s",
         (int) (last_slash - full), full, base)
         : snprintf(dest_dir, dest_dir_size, "%s", base);
 
     free(full);
     return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
+}
+
+/* unpackgin decompress archive in memory */
+static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, const char *dest_dir) {
+    if (mkdir(dest_dir, 0755) != 0 && errno != EEXIST) {
+        fprintf(stderr, "mkdir(%s) failed: %s\n", dest_dir, strerror(errno));
+        return -1;
+    }    
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) self->fatal("pipe");
+
+    pid_t pid = fork();
+    if (pid == -1) self->fatal("fork");
+
+    if (pid == 0) {
+        close(pipefd[1]);
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) self->fatal("dup2");
+        close(pipefd[0]);
+        execlp("tar","tar","-xf","-","-C", dest_dir,(char *) NULL);
+        perror("execlp tar -xf");
+        _exit(127);
+    }
+
+    close(pipefd[0]);
+    size_t written = 0;
+    while (written < size) {
+        /* code */
+        ssize_t w = write(pipefd[1], buf + written, size - written);
+        if (w == -1) {
+            if (errno == EINTR) continue;
+            fprintf(stderr, "write to tar pipe failed: %s\n", strerror(errno));
+            close(pipefd[1]);
+            return -1;
+        }
+        written += (size_t)w;
+    }
+    close(pipefd[1]);
+
+    int status;
+    if (waitpid(pid, &status, 0) == -1) {
+        fprintf(stderr,"waitpid failed: %s\n", strerror(errno));
+        return -1;
+    }
+
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
 }
 
 /* This function load subject:
@@ -970,6 +1114,15 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     *out_buf = acc;
     *out_size = acc_size;
+
+    /* implementation of GNU/Linux dirrectory factory and decompress result. */
+    char dest_dir[PATH_MAX];
+    if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
+        _unpack_tar_buffer(self, acc, acc_size, dest_dir) != 0) {
+        fprintf(stderr, "failed to unpack %s\n", path);
+        return -9;
+    }
+
     return 0;
 }
 
