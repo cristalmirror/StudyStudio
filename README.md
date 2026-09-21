@@ -65,6 +65,44 @@ docker run --rm \
 
 ```
 
+## 🐞 Debugging with GDB
+
+The Makefile has a `debug` target that compiles an unoptimized build with debug symbols (`-g -O0`), placed in `build/linux-debug/` so it never mixes with the release object files in `build/linux/`.
+
+Build it the same way as the release binaries, inside the Docker toolchain (the host lacks `gtk4-devel`/`libarchive-devel`, so plain `make` only works in the container):
+
+```
+docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -v "$(pwd)/src:/usr/src/app/src" \
+    -v "$(pwd)/include:/usr/src/app/include" \
+    -v "$(pwd)/build:/usr/src/app/build" \
+    -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
+    -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
+    -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
+    mi_app_builder \
+    make debug
+```
+
+Once the debug binary exists, run GDB directly on the host, the same way you already run the release binary:
+
+```
+gdb ./build/studystudio-0.0.x_linux_debug
+```
+
+Inside GDB:
+```
+(gdb) break main
+(gdb) run
+(gdb) bt        # backtrace after a crash
+```
+
+There's also a `make gdb` shortcut that rebuilds `debug` and launches GDB in one step — use it on the host after the object files exist, since the container isn't set up to run GTK windows or attach a debugger interactively:
+
+```
+make gdb
+```
+
 ## 📂 Project Structure
 ```
 StudyStudio/
@@ -72,7 +110,8 @@ StudyStudio/
 │ ├── main.c # Application entry point and callbacks
 │ └── subject.c # Implementations 
 ├── build/
-│ ├── linux/ # Linux object files
+│ ├── linux/ # Linux object files (release)
+│ ├── linux-debug/ # Linux object files (debug, for GDB)
 │ └── win64/ # Windows object files
 ├──include
 │ └ subject.h #definitions subject manager

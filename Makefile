@@ -16,6 +16,9 @@ INCLUDES := -I$(INCLUDE_DIR)
 CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
 LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -larchive -llzma
 
+# --- Variante de depuración (sin optimizar, con símbolos para GDB) ---
+CFLAGS_LINUX_DEBUG := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_LINUX)
+
 # ==========================================
 # 2. Compilación para Windows (MinGW-w64)
 # ==========================================
@@ -36,16 +39,17 @@ HEADERS := $(wildcard $(INCLUDE_DIR)/.h)
 
 OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
 OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o) $(BUILD_DIR)/win64/resources.o
+OBJS_LINUX_DEBUG := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux-debug/%.o) $(BUILD_DIR)/linux-debug/resources.o
 
 # ==========================================
 # Reglas
 # ==========================================
-.PHONY: all linux win64 clean setup
+.PHONY: all linux win64 debug gdb clean setup
 
 all: linux win64
 
 setup:
-	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64
+	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64 $(BUILD_DIR)/linux-debug
 
 # --- Generar resources.c ---
 $(RESOURCE_SRC): resources.xml interface.ui | setup
@@ -63,6 +67,22 @@ $(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
 
 $(BUILD_DIR)/linux/resources.o: $(RESOURCE_SRC) | setup
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
+
+# --- Linux (debug, para GDB) ---
+debug: $(BUILD_DIR)/$(NAME)_linux_debug
+
+$(BUILD_DIR)/$(NAME)_linux_debug: $(OBJS_LINUX_DEBUG)
+	$(CC_LINUX) $(OBJS_LINUX_DEBUG) -o $@ $(LDFLAGS_LINUX)
+	@echo "[✓] Compilado para Linux (debug): $@"
+
+$(BUILD_DIR)/linux-debug/%.o: $(SRC_DIR)/%.c | setup
+	$(CC_LINUX) $(CFLAGS_LINUX_DEBUG) -c $< -o $@
+
+$(BUILD_DIR)/linux-debug/resources.o: $(RESOURCE_SRC) | setup
+	$(CC_LINUX) $(CFLAGS_LINUX_DEBUG) -c $< -o $@
+
+gdb: debug
+	gdb $(BUILD_DIR)/$(NAME)_linux_debug
 
 # --- Windows ---
 win64: $(BUILD_DIR)/$(NAME)_win64.exe
