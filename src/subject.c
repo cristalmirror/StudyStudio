@@ -25,6 +25,7 @@
 #else
    #include <linux/limits.h>
    #include <sys/wait.h>
+   #include <sys/stat.h>
 #endif
 
 /*standard definitions for all OS*/
@@ -110,6 +111,36 @@ void _read_subject(Subject *self) {
  * .h and .c, but the moment is better that all are integrated
  * here.
  */
+
+
+
+ /*
+  * Make the name of the restul of decompress the folder or archive
+  * with the same name of the original archive tar.xz compress
+  * Exemple: "C:\subjects\math.xz" -> dest_dir = "C:\subjects\math"
+  */
+static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
+    char *full = _fullpath(NULL, path, 0);
+    if (!full) return -1;
+
+    //filter backslash
+    char *last_slash = strrchr(full, '\\');
+    char base [MAX_PATH];
+    snprintf(base, sizeof(base), "%s", last_slash ? last_slash + 1 : full);
+
+    //filter point
+    char *dot =strrchr(base, sizeof(base), "%s", '.');
+    if (dot != NULL && dot != base) *dot = '\0';
+
+    int n = last_slash
+        ? snprintf(dest_dir, dest_dir_size, "%.*s\\%s",
+        (int) (last_slash - full), full, base)
+        : snprintf(dest_dir, dest_dir_size, "%s", base);
+
+    free(full);
+    return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
+}
+
 
 int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
     (void)self;
@@ -768,7 +799,31 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     }
 
     printf("Maked %s\n", *outpath);
-    
+
+}
+
+/*
+  * Make the name of the restul of decompress the folder or archive
+  * with the same name of the original archive tar.xz compress
+  */
+static _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
+    char *full = realpath(path, NULL);
+    if (!full) return -1;
+
+    char *last_slash = strrchar(full,'/');
+    char base[PATH_MAX];
+    snprintf(base,sizeof(base), "%s", last_slash ? last_slash + 1 : full);
+
+    char *dot = strrchr(base, '.');
+    if (dot != NULL && dot != base) *dot = '\0';
+
+    int n = last_slash
+        ? snpritf(dest_dir, dest_dir_size, "%.*s/%s",
+        (int) (last_slash - full), full, base)
+        : snprintf(dest_dir, dest_dir_size, "%s", base);
+
+    free(full);
+    return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
 }
 
 /* This function load subject:

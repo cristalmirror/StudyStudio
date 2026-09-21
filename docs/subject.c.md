@@ -112,6 +112,21 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 
 These return codes describe the current implementation, not a complete or reliable error contract for every failure path. The Windows implementation returns the same codes for the same conditions; it does not introduce Windows-specific ones.
 
+## Extraction (in progress)
+
+Both platforms have a new private helper, `_derive_extract_dir(path, dest_dir, dest_dir_size)`, added as groundwork for making `_load_subject` unpack its decoded bytes into real files instead of only returning them in memory (see [Loading](#loading) and [prototype_ia.md](prototype_ia.md) for the full design this is based on). It is not called from `_load_subject` yet, and does not compile as currently written on either platform (see below).
+
+Intended behavior, mirroring `_save_subject`'s directory/basename split: resolve the archive path to an absolute path (`_fullpath` on Windows, `realpath` on Linux), take its last path component, and drop everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped.
+
+Current defects (source review only, not yet built):
+
+- Windows: `strrchr(base, sizeof(base), "%s", '.')` passes four arguments to `strrchr`, which takes two (`const char *`, `int`); this does not compile. It should read `strrchr(base, '.')`.
+- Linux: `strrchar(full, '/')` — `strrchar` does not exist; this should be `strrchr`.
+- Linux: `snpritf(dest_dir, dest_dir_size, ...)` — `snpritf` does not exist; this should be `snprintf`.
+- Linux: the function definition omits a return type (`static _derive_extract_dir(...)` instead of `static int _derive_extract_dir(...)`), relying on implicit `int`.
+
+Fixed since the previous review: the Linux truncation check now reads `(size_t) n >= dest_dir_size`, correctly treating an `snprintf` result equal to the buffer size (output truncated, no room for the terminator) as failure instead of success.
+
 ## Known implementation limitations
 
 - Windows saving and loading now run natively (no `tar` dependency), but
