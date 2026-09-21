@@ -31,6 +31,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
 
+## [0.0.10] - 2026-09-20
+
+### Added
+- `Makefile`: `debug` target, building `build/studystudio-0.0.10_linux_debug`
+  with `-g -O0 -DDEBUG` (objects kept separate in `build/linux-debug/` so they
+  never mix with the optimized `build/linux/` objects), and a `gdb` target
+  that depends on `debug` and launches GDB against the resulting binary.
+  `setup` now also creates `build/linux-debug`.
+- `README.md`: new "🐞 Debugging with GDB" section documenting the workflow
+  (compile the debug binary inside the Docker toolchain, then run GDB
+  directly on the host, the same way the release binary is already run) with
+  basic GDB usage examples.
+- `docs/prototype_ia.md`: new document logging this AI-assisted working
+  session — the GDB setup above, an analysis of how `_save_subject`/
+  `_load_subject` (de)compress a full directory tree on each platform, and a
+  proposed (not yet implemented) design for a private method that would make
+  `_load_subject` unpack its decompressed buffer back into real files/folders
+  on disk.
+- `src/main.c`, `src/subject.c`, `include/subject.h`: standard file header
+  (developer, repository, version, license, edit date).
+- `src/subject.c`: in-progress `_derive_extract_dir` helper (Windows and
+  Linux variants) and the `<sys/stat.h>` include it will need, groundwork for
+  making `_load_subject` unpack archives back to disk. Not yet wired in, and
+  not yet compiling as written (see `docs/subject.c.md`).
+
+### Changed
+- Bumped the project version to `0.0.10`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge in `README.md`, and the
+  "Status"/baseline version lines across `docs/*.md` now read `0.0.10`.
+- `docs/Makefile.md`: documented the new `debug`/`gdb` targets in the targets
+  table and "Inputs and dependencies", and added a "Current limitations"
+  note that there is no Windows debug variant and that `gdb` is intended to
+  run on the host rather than inside the Docker build container (no `ptrace`
+  capability or display forwarding is configured there).
+- `README.md`: updated the "Project Structure" tree to include the new
+  `build/linux-debug/` directory.
+- Translated the remaining Spanish-language comments in `Makefile` and
+  `Dockerfile` to English.
+
 ## [0.0.9] - 2026-09-17
 
 ### Fixed

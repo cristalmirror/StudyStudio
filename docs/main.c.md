@@ -1,6 +1,6 @@
 # `src/main.c`
 
-Status: draft for user approval; version 0.0.9.
+Status: draft for user approval; version 0.0.10.
 
 ## Purpose and dependencies
 
