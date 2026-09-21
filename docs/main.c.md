@@ -4,7 +4,7 @@ Status: draft for user approval; version 0.0.10.
 
 ## Purpose and dependencies
 
-Starts the GTK4 application, loads the embedded interface, and connects UI events. Depends on GTK4/GLib, `include/subject.h`, and the resource path `/org/studystudio/interface.ui`.
+Starts the GTK4 application, loads the embedded interface, and connects UI events. Depends on GTK4/GLib, `include/subject.h`, and the resource path `/org/studystudio/interface.ui`. The file now opens with a standard header comment (developer, repository, version, license, edit date).
 
 ## Current behavior
 

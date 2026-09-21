@@ -4,7 +4,7 @@ Status: draft for user approval; version 0.0.10.
 
 ## Purpose
 
-Declares `Subject`, its public fields and operation pointers, and the `new_subject(int value)` constructor. Defines input/output buffer sizes of 65,536 bytes.
+Declares `Subject`, its public fields and operation pointers, and the `new_subject(int value)` constructor. Defines input/output buffer sizes of 65,536 bytes. The file now opens with a standard header comment (developer, repository, version, license, edit date), kept above the existing purpose comment.
 
 The header is self-contained as of this version: it includes `<stdint.h>`,
 `<stdio.h>`, `<sys/types.h>`, and `<lzma.h>` unconditionally, and `<windows.h>`

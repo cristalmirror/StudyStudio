@@ -7,7 +7,9 @@ Status: draft for user approval; version 0.0.10.
 Implements subject construction/destruction, diagnostic output, process waiting,
 and XZ archive handling through liblzma. Linux archives directories with
 external `tar`; Windows uses a native directory traversal and a custom entry
-serializer, with no dependency on `tar`.
+serializer, with no dependency on `tar`. The file opens with a standard header
+comment (developer, repository, version, license, edit date), kept above the
+existing purpose comment.
 
 ## Lifecycle and helper operations
 

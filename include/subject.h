@@ -1,6 +1,14 @@
+/**
+ * Developer: cristalmirror
+ * Repository: https://github.com/cristalmirror/StudyStudio
+ * Version: 0.0.10
+ * License: GPLv3
+ * Last edited: 2026-09-20
+ */
+
 /*
  * this archive have all operaticons needed to create and manipulation of a
- * subject and create the archive .xz . 
+ * subject and create the archive .xz .
  */
 
 #ifndef SUBJECT_H
