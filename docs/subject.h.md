@@ -1,6 +1,6 @@
 # `include/subject.h`
 
-Status: draft for user approval; version 0.0.10.
+Status: draft for user approval; version 0.0.11.
 
 ## Purpose
 

@@ -1,10 +1,10 @@
 # `interface.ui`
 
-Status: draft for user approval; version 0.0.10.
+Status: draft for user approval; version 0.0.11.
 
 ## Purpose and structure
 
-Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `StudyStudio-0.0.10`, with a default size of 300 by 400.
+Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `StudyStudio-0.0.11`, with a default size of 300 by 400.
 
 | Object ID | Role |
 | --- | --- |
