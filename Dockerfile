@@ -1,15 +1,15 @@
-# Usamos Fedora porque tiene paquetes precompilados de GTK4 para MinGW-w64
+# We use Fedora because it has precompiled GTK4 packages for MinGW-w64
 FROM fedora:40
 
-# Evitar interacciones y limpiar caché para reducir el tamaño
+# Avoid interactive prompts and clean the cache to reduce image size
 RUN dnf install -y \
-    # --- Herramientas básicas ---
+    # --- Basic tools ---
     gcc gcc-c++ make git \
-    # --- Librerías de compresión y empaquetado para Linux ---
+    # --- Compression and packaging libraries for Linux ---
     xz-devel libarchive-devel \
-    # --- Librerías GTK4 para Linux ---
+    # --- GTK4 libraries for Linux ---
     pkgconf-pkg-config gtk4-devel \
-    # --- Librerías GTK4 para Windows (Compilación cruzada) ---
+    # --- GTK4 libraries for Windows (cross-compilation) ---
     mingw64-gcc \
     mingw64-gtk4 \
     mingw64-xz \
@@ -20,8 +20,8 @@ RUN dnf install -y \
 
 WORKDIR /usr/src/app
 
-# Copiamos el código y el Makefile
+# Copy the source code and the Makefile
 COPY . .
 
-# Mantenemos el contenedor vivo para que tú ejecutes 'make'
+# Keep the container alive so you can run 'make' inside it
 CMD ["/bin/bash"]
