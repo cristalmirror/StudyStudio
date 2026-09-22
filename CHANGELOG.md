@@ -37,6 +37,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
 
+## [0.0.13] - 2026-09-22
+
+### Added
+- `Makefile`: `win64-debug` target, mirroring the existing Linux `debug`
+  target for Windows — new `CFLAGS_WIN_DEBUG` (`-g -O0 -DDEBUG`),
+  `LDFLAGS_WIN_DEBUG`, and `OBJS_WIN64_DEBUG` build `build/studystudio-
+  0.0.13_win64_debug.exe` from objects kept in `build/win64-debug/`, so they
+  never mix with the optimized `build/win64/` objects. Unlike `win64`,
+  `LDFLAGS_WIN_DEBUG` omits `-mwindows`, so the debug `.exe` keeps its
+  console window for debug output. `setup` now also creates
+  `build/win64-debug`. There is no `gdb`-equivalent shortcut for it: this
+  toolchain does not set up `winedbg`/Wine for cross-debugging a MinGW-w64
+  binary (see `docs/Makefile.md`).
+
+### Fixed
+- `Dockerfile`: added `RUN chown -R 1000:1000 /usr/src/app` after `COPY`.
+  `WORKDIR`/`COPY` run as root during `docker build`, so `/usr/src/app`
+  itself was root-owned in the image regardless of what gets bind-mounted
+  over its subdirectories later. Removing or creating an entry directly
+  inside `/usr/src/app` needs write permission on `/usr/src/app` itself, not
+  on the entry, so running the container as a non-root user
+  (`--user "$(id -u):$(id -g)"`) while bind-mounting individual
+  subdirectories (`-v "$(pwd)/build:/usr/src/app/build"`, etc., rather than
+  the whole repository at once) failed with `Permission denied` on `make
+  clean` and `make setup` before this fix (see `docs/Dockerfile.md`).
+- `Makefile`: `clean` now runs `rm -rf $(BUILD_DIR)/*` instead of
+  `rm -rf $(BUILD_DIR)`, emptying `build/`'s contents rather than removing
+  the directory itself. When `build/` is bind-mounted as its own Docker
+  volume, it is an active mount point inside the container, and no process,
+  root or not, can `rmdir` an active mount point — only empty it. `clean`
+  failed with `Device or resource busy` under that mount layout before this
+  fix (see `docs/Makefile.md`).
+
+### Changed
+- Bumped the project version to `0.0.13`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field in the standard file header comment in
+  `src/main.c`, `src/subject.c`, and `include/subject.h`, and the
+  "Status"/baseline version lines and embedded `studystudio-0.0.x`/
+  `StudyStudio-0.0.x` mentions across `docs/*.md` now read `0.0.13`.
+- `README.md`: documented `make win64-debug` alongside the existing GDB
+  section, and added `build/win64-debug/` to the "Project Structure" tree.
+- `docs/Makefile.md`: added the `win64-debug` target row, updated the
+  `clean` and `setup` descriptions to match the fixes above, and replaced
+  the "no Windows debug variant" limitation with a note that `win64-debug`
+  exists but still has no attached debugger.
+- `docs/build.yml.md`: corrected the "no Windows debug job" limitation,
+  which had reasoned from the `Makefile` having no `win64-debug` target —
+  that target now exists, but the CI workflow itself has not been updated
+  to build or upload it.
+- `docs/Dockerfile.md`: documented the new `chown` step and why it is
+  needed for the per-subdirectory bind-mount style specifically (mounting
+  the whole repository at `/usr/src/app` sidesteps the issue on its own).
+
 ## [0.0.12] - 2026-09-22
 
 ### Added

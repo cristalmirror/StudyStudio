@@ -2,7 +2,7 @@
 
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
-[![Version](https://img.shields.io/badge/version-0.0.12-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.0.13-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
@@ -10,7 +10,7 @@
 ---
 
 > [!WARNING]
-> **This project is in early development (v0.0.12).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
+> **This project is in early development (v0.0.13).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
 
 ---
 
@@ -103,6 +103,8 @@ There's also a `make gdb` shortcut that rebuilds `debug` and launches GDB in one
 make gdb
 ```
 
+A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.0.x_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
+
 ## 📂 Project Structure
 ```
 StudyStudio/
@@ -112,7 +114,8 @@ StudyStudio/
 ├── build/
 │ ├── linux/ # Linux object files (release)
 │ ├── linux-debug/ # Linux object files (debug, for GDB)
-│ └── win64/ # Windows object files
+│ ├── win64/ # Windows object files (release)
+│ └── win64-debug/ # Windows object files (debug)
 ├──include
 │ └ subject.h #definitions subject manager
 ├── interface.ui # GTK4 UI definition (XML)
@@ -122,3 +125,17 @@ StudyStudio/
 ├── Dockerfile # Fedora 40 build environment
 ├── CHANGELOG.md # Version history
 └── README.md # This file
+```
+
+## 📝 Commit Conventions
+
+This project follows [Conventional Commits](https://www.conventionalcommits.org/). Prefix each commit message with one of the following types:
+
+| Type | Meaning |
+| --- | --- |
+| `feat` | A new feature. |
+| `fix` | A bug fix. |
+| `docs` | Documentation-only changes (e.g. `README.md`). |
+| `refactor` | Code changes that neither fix a bug nor add a feature (performance improvements, restructuring). |
+| `test` | Adding or modifying unit or integration tests. |
+| `chore` | Maintenance tasks, dependency updates, or build/CI configuration. |
