@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `build/win64-debug`. There is no `gdb`-equivalent shortcut for it: this
   toolchain does not set up `winedbg`/Wine for cross-debugging a MinGW-w64
   binary (see `docs/Makefile.md`).
+- `.github/workflows/build.yml`: new "Compile Windows binary (debug)" step
+  running `make win64-debug` with the same container/volume layout as the
+  other steps. "Verify binaries were produced" now also checks for
+  `build/studystudio-*_win64_debug.exe`, and "Upload binaries as artifacts"
+  now includes it alongside the other three binaries.
+- `README.md`: new "📝 Commit Conventions" section documenting the
+  [Conventional Commits](https://www.conventionalcommits.org/) types used in
+  this repository (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`).
 
 ### Fixed
 - `Dockerfile`: added `RUN chown -R 1000:1000 /usr/src/app` after `COPY`.
@@ -83,10 +91,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `clean` and `setup` descriptions to match the fixes above, and replaced
   the "no Windows debug variant" limitation with a note that `win64-debug`
   exists but still has no attached debugger.
-- `docs/build.yml.md`: corrected the "no Windows debug job" limitation,
-  which had reasoned from the `Makefile` having no `win64-debug` target —
-  that target now exists, but the CI workflow itself has not been updated
-  to build or upload it.
+- `docs/build.yml.md`: added the "Compile Windows binary (debug)" step to
+  the jobs/steps table, updated "Verify binaries were produced" and "Upload
+  binaries as artifacts" to mention all four binaries, and replaced the "no
+  Windows debug job" limitation (obsolete now that the step above exists)
+  with a note that neither debug step attaches a debugger.
 - `docs/Dockerfile.md`: documented the new `chown` step and why it is
   needed for the per-subdirectory bind-mount style specifically (mounting
   the whole repository at `/usr/src/app` sidesteps the issue on its own).
