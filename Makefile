@@ -1,4 +1,4 @@
-NAME      := studystudio-0.0.12
+NAME      := studystudio-0.0.13
 SRC_DIR   := src
 INCLUDE_DIR := include
 BUILD_DIR := build
@@ -31,6 +31,10 @@ GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4)
 CFLAGS_WIN  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
 LDFLAGS_WIN := $(GTK_LIBS_WIN) -larchive -llzma -mwindows -static-libgcc
 
+# --- Debug variant (unoptimized, with symbols) ---
+CFLAGS_WIN_DEBUG  := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_WIN)
+LDFLAGS_WIN_DEBUG := $(GTK_LIBS_WIN) -larchive -llzma -static-libgcc
+
 # ==========================================
 # Source files
 # ==========================================
@@ -40,16 +44,17 @@ HEADERS := $(wildcard $(INCLUDE_DIR)/.h)
 OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
 OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o) $(BUILD_DIR)/win64/resources.o
 OBJS_LINUX_DEBUG := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux-debug/%.o) $(BUILD_DIR)/linux-debug/resources.o
+OBJS_WIN64_DEBUG := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64-debug/%.o) $(BUILD_DIR)/win64-debug/resources.o
 
 # ==========================================
 # Rules
 # ==========================================
-.PHONY: all linux win64 debug gdb clean setup
+.PHONY: all linux win64 debug win64-debug gdb clean setup
 
 all: linux win64
 
 setup:
-	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64 $(BUILD_DIR)/linux-debug
+	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64 $(BUILD_DIR)/linux-debug $(BUILD_DIR)/win64-debug
 
 # --- Generate resources.c ---
 $(RESOURCE_SRC): resources.xml interface.ui | setup
@@ -60,7 +65,7 @@ linux: $(BUILD_DIR)/$(NAME)_linux
 
 $(BUILD_DIR)/$(NAME)_linux: $(OBJS_LINUX)
 	$(CC_LINUX) $(OBJS_LINUX) -o $@ $(LDFLAGS_LINUX)
-	@echo "[✓] Compilado para Linux: $@"
+	@echo -e "\033[32m[✓] Compilado para Linux:\033[0m $@\n"
 
 $(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
@@ -73,7 +78,7 @@ debug: $(BUILD_DIR)/$(NAME)_linux_debug
 
 $(BUILD_DIR)/$(NAME)_linux_debug: $(OBJS_LINUX_DEBUG)
 	$(CC_LINUX) $(OBJS_LINUX_DEBUG) -o $@ $(LDFLAGS_LINUX)
-	@echo "[✓] Compilado para Linux (debug): $@"
+	@echo -e "\033[32m[✓] Compilado para Linux (debug): \033[0m $@ \n"
 
 $(BUILD_DIR)/linux-debug/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_LINUX) $(CFLAGS_LINUX_DEBUG) -c $< -o $@
@@ -89,7 +94,7 @@ win64: $(BUILD_DIR)/$(NAME)_win64.exe
 
 $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 	$(CC_WIN64) $(OBJS_WIN64) -o $@ $(LDFLAGS_WIN)
-	@echo "[✓] Compilado para Windows: $@"
+	@echo -e "\033[31m[✓] Compilado para Windows:\033[0m $@\n"
 
 $(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
@@ -97,7 +102,20 @@ $(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c | setup
 $(BUILD_DIR)/win64/resources.o: $(RESOURCE_SRC) | setup
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
 
+# --- Windows (debug) ---
+win64-debug: $(BUILD_DIR)/$(NAME)_win64_debug.exe
+
+$(BUILD_DIR)/$(NAME)_win64_debug.exe: $(OBJS_WIN64_DEBUG)
+	$(CC_WIN64) $(OBJS_WIN64_DEBUG) -o $@ $(LDFLAGS_WIN_DEBUG)
+	@echo -e "\033[31m[✓] Compilado para Windows (debug):\033[0m $@\n"
+
+$(BUILD_DIR)/win64-debug/%.o: $(SRC_DIR)/%.c | setup
+	$(CC_WIN64) $(CFLAGS_WIN_DEBUG) -c $< -o $@
+
+$(BUILD_DIR)/win64-debug/resources.o: $(RESOURCE_SRC) | setup
+	$(CC_WIN64) $(CFLAGS_WIN_DEBUG) -c $< -o $@
+
 # --- Cleanup ---
 clean:
-	rm -rf $(BUILD_DIR) resources.c
-	@echo "[✓] Carpeta build/ y resources.c eliminados."
+	rm -rf $(BUILD_DIR)/* resources.c
+	@echo -e "\033[35m[✓] Contenido de build/ y resources.c eliminados.\033[0m\n"

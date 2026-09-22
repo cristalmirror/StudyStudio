@@ -23,5 +23,9 @@ WORKDIR /usr/src/app
 # Copy the source code and the Makefile
 COPY . .
 
+# Let non-root users (e.g. --user "$(id -u):$(id -g)") write/remove files here,
+# since bind mounts over individual subdirs don't change this directory's own ownership
+RUN chown -R 1000:1000 /usr/src/app
+
 # Keep the container alive so you can run 'make' inside it
 CMD ["/bin/bash"]
