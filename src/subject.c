@@ -151,7 +151,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
     size_t offset = 0;
 
     if (!CreateDirectoryA(dest_dir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
-        fprintf(stderrm "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
+        fprintf(stderr, "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
         return -1;
     }
 
@@ -220,7 +220,7 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
     snprintf(base, sizeof(base), "%s", last_slash ? last_slash + 1 : full);
 
     //filter point
-    char *dot =strrchr(base, sizeof(base), "%s", '.');
+    char *dot =strrchr(base, '.');
     if (dot != NULL && dot != base) *dot = '\0';
 
     int n = last_slash
