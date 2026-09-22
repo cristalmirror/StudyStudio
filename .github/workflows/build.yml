@@ -43,11 +43,25 @@ jobs:
             studystudio-builder \
             make debug
 
+      - name: Compile Windows binary (debug)
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$(pwd)/src:/usr/src/app/src" \
+            -v "$(pwd)/include:/usr/src/app/include" \
+            -v "$(pwd)/build:/usr/src/app/build" \
+            -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
+            -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
+            -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
+            studystudio-builder \
+            make win64-debug
+
       - name: Verify binaries were produced
         run: |
           test -f build/studystudio-*_linux
           test -f build/studystudio-*_win64.exe
           test -f build/studystudio-*_linux_debug
+          test -f build/studystudio-*_win64_debug.exe
 
       - name: Upload binaries as artifacts
         uses: actions/upload-artifact@v4
@@ -57,3 +71,4 @@ jobs:
             build/*_linux
             build/*_win64.exe
             build/*_linux_debug
+            build/*_win64_debug.exe
