@@ -1,17 +1,17 @@
 # `Makefile`
 
-Status: draft for user approval; version 0.0.11.
+Status: draft for user approval; version 0.0.12.
 
 ## Purpose
 
-Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.0.11`.
+Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.0.12`.
 
 | Target | Behavior |
 | --- | --- |
 | `all` | Requests both Linux and Windows builds; default target. |
-| `linux` | Builds `build/studystudio-0.0.11_linux` with GCC. |
-| `win64` | Builds `build/studystudio-0.0.11_win64.exe` with MinGW-w64. |
-| `debug` | Builds `build/studystudio-0.0.11_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
+| `linux` | Builds `build/studystudio-0.0.12_linux` with GCC. |
+| `win64` | Builds `build/studystudio-0.0.12_win64.exe` with MinGW-w64. |
+| `debug` | Builds `build/studystudio-0.0.12_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
 | `setup` | Creates platform object directories, including the debug one. |
 | `clean` | Deletes `build` and the root-level `resources.c`. |

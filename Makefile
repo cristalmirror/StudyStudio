@@ -1,4 +1,4 @@
-NAME      := studystudio-0.0.11
+NAME      := studystudio-0.0.12
 SRC_DIR   := src
 INCLUDE_DIR := include
 BUILD_DIR := build

@@ -10,11 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Known Issues
-- Neither platform's `load_subject` extracts the archive back into files on
-  disk: Linux returns the raw decompressed TAR stream, Windows returns the
-  raw decompressed entry stream; parsing/unpacking is not implemented on
-  either side yet.
-- `save_subject`/`load_subject` are not wired into `main.c`/the UI yet.
+- Windows's `load_subject` still does not extract the archive back into
+  files on disk: `_derive_extract_dir`'s malformed `strrchr` call and a
+  `stderr`/`stderrm` typo in `_unpack_windows_buffer` mean the Windows
+  extraction path does not compile yet, even though it is wired into
+  `_load_subject` the same way as Linux, which does compile and correctly
+  unpacks the decoded TAR bytes via `_unpack_tar_buffer` (see
+  `docs/subject.c.md#extraction`).
+- Neither `_save_subject` nor `_load_subject` is explicitly wired into
+  `main.c`/the UI as a dedicated call, but since `main.c` already calls
+  `load_subject` for the "Load Subject" button, Linux extraction now runs
+  as a side effect of that existing button.
 - The internal Windows entry format has no magic value, version, or
   end-of-archive marker yet; it must not be treated as a stable archive
   format.
@@ -30,6 +36,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.0.12] - 2026-09-22
+
+### Added
+- `.github/workflows/build.yml`: GitHub Actions workflow that builds the
+  project on every push/PR to `main` by reusing the existing Docker
+  toolchain — `make all` for the Linux/Windows release binaries and
+  `make debug` for the Linux debug binary — verifies all three binaries
+  were produced, and uploads them as workflow artifacts.
+- `docs/build.yml.md`: documents the new workflow's steps, triggers, and
+  current limitations (no Windows debug job, no test step, no Docker layer
+  caching).
+
+### Changed
+- Bumped the project version to `0.0.12`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge in `README.md`, the `Version`/
+  `Last edited` fields in the standard file header comment in `src/main.c`,
+  `src/subject.c`, and `include/subject.h`, and the "Status"/baseline
+  version lines across `docs/*.md` now read `0.0.12`.
+- `README.md`: the early-development warning banner had been left reading
+  `v0.0.5` since before the `0.0.6` release; it now reads `v0.0.12`,
+  matching the version badge above it.
+- `docs/Dockerfile.md`, `docs/resources.c.md`, `docs/resources.xml.md`: the
+  "Status" baseline lines had been left at a stale `0.0.7` since before the
+  `0.0.8` release; they now read `0.0.12` along with the rest of `docs/*.md`.
+
+## [0.0.11] - 2026-09-21
+
+### Added
+- `src/subject.c`: `_load_subject` now calls the new `_unpack_tar_buffer`
+  after a successful decode on Linux, actually unpacking the decoded TAR
+  bytes back into individual files/directories on disk via `tar -xf -`,
+  the load-side mirror of the existing `tar -cf -` save path. Windows is
+  wired the same way through `_unpack_windows_buffer`, but two defects
+  (`_derive_extract_dir`'s malformed `strrchr` call, and a typo turning
+  `stderr` into an undeclared `stderrm` identifier) mean the Windows build
+  still does not compile (see `docs/subject.c.md#extraction`). Since
+  `main.c` already calls `load_subject`, Linux extraction now runs as a
+  side effect of the existing "Load Subject" button.
+
+### Changed
+- Bumped the project version to `0.0.11`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge in `README.md`, the `Version`
+  field in the standard file header comment in `src/main.c`,
+  `src/subject.c`, and `include/subject.h`, and the "Status"/baseline
+  version lines across `docs/*.md` now read `0.0.11`.
+- `docs/README.md`, `docs/main.c.md`, `docs/subject.c.md`: updated to
+  describe the Linux extraction wiring above and the remaining Windows
+  compile failure.
 
 ## [0.0.10] - 2026-09-20
 

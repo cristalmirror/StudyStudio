@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.0.11
+ * Version: 0.0.12
  * License: GPLv3
- * Last edited: 2026-09-20
+ * Last edited: 2026-09-22
  */
 
 #include <gtk/gtk.h>
