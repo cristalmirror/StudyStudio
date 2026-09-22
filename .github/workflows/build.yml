@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker toolchain image
+        run: docker build -t studystudio-builder .
+
+      - name: Compile Linux + Windows binaries (release)
+        run: |
+          mkdir -p build
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$(pwd)/src:/usr/src/app/src" \
+            -v "$(pwd)/include:/usr/src/app/include" \
+            -v "$(pwd)/build:/usr/src/app/build" \
+            -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
+            -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
+            -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
+            studystudio-builder \
+            make all
+
+      - name: Compile Linux binary (debug)
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$(pwd)/src:/usr/src/app/src" \
+            -v "$(pwd)/include:/usr/src/app/include" \
+            -v "$(pwd)/build:/usr/src/app/build" \
+            -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
+            -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
+            -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
+            studystudio-builder \
+            make debug
+
+      - name: Verify binaries were produced
+        run: |
+          test -f build/studystudio-*_linux
+          test -f build/studystudio-*_win64.exe
+          test -f build/studystudio-*_linux_debug
+
+      - name: Upload binaries as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: studystudio-binaries
+          path: |
+            build/*_linux
+            build/*_win64.exe
+            build/*_linux_debug
