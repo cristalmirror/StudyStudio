@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   format.
 - The Windows entry format records only regular files, so empty directories
   cannot be restored.
+- `interface.ui`: the in-progress `footer` is declared as a second child of
+  `main_window` (a GTK4 `GtkWindow` accepts only one) and contains a
+  malformed `<property name>` line, so `gtk_builder_new_from_resource()`
+  aborts at startup until it is fixed (see `docs/interface.ui.md#footer-work-in-progress`).
 
 ### Planned
 - Implement CSS custom styles for widgets
@@ -77,6 +81,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   root or not, can `rmdir` an active mount point — only empty it. `clean`
   failed with `Device or resource busy` under that mount layout before this
   fix (see `docs/Makefile.md`).
+- Completed the `0.0.13` version bump listed under "Changed", which had
+  missed some files: the window title in `interface.ui` and the "Status"/
+  baseline lines of `docs/interface.ui.md`, `docs/main.c.md`,
+  `docs/subject.c.md`, `docs/subject.h.md`, `docs/resources.c.md`,
+  `docs/resources.xml.md`, and `docs/README.md` (including its SOLID
+  section) still read `0.0.12`.
 
 ### Changed
 - Bumped the project version to `0.0.13`: `Makefile`'s `NAME`, the window
@@ -99,6 +109,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/Dockerfile.md`: documented the new `chown` step and why it is
   needed for the per-subdirectory bind-mount style specifically (mounting
   the whole repository at `/usr/src/app` sidesteps the issue on its own).
+- `docs/interface.ui.md`: added the `footer` object to the ID table and a
+  "Footer (work in progress)" section describing its current defects and the
+  planned design (a `footer_label` widget fed by a `subject_set_logger`
+  callback, so `src/subject.c` stays independent of GTK).
+- `docs/prototype_ia.md`: added the 2026-09-23 session log (review of
+  `interface.ui` and design of the footer logging callback).
 
 ## [0.0.12] - 2026-09-22
 

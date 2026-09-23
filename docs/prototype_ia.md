@@ -333,3 +333,163 @@ return 0;
 - [ ] Decide whether `_derive_extract_dir` should also strip `.tar` from names like `math.tar.xz`.
 - [ ] Document the new `-9` error code in the table in `docs/subject.c.md` once implemented and tested.
 - [ ] Update `docs/subject.c.md` ("Known implementation limitations") to reflect that unpacking is no longer pending, once it is implemented and verified.
+
+---
+
+### cristalmirror IA secion ### [2026-09-23]
+
+Log of an AI-assisted session (Claude Code) on StudyStudio. Covers a review of the uncommitted `footer` added to `interface.ui` and the design of a logging mechanism so every message printed by `subject.c` is shown in that footer. As in previous sessions, **no files were edited by the AI**: all code below is reference code pending manual implementation by the user.
+
+---
+
+## 1. Review of `interface.ui`
+
+The uncommitted change added this block as a second child of `main_window`:
+
+```xml
+<child>
+  <object class="GtkBox" id="footer">
+    <property name>
+  </object>
+</child>
+```
+
+Problems found:
+
+1. **Invalid XML (line 48):** `<property name>` has no attribute value and is never closed. `glib-compile-resources` does not validate XML (no `preprocess="xml-stripblanks"` in `resources.xml`), so the build may succeed but `gtk_builder_new_from_resource()` (`src/main.c:110`) aborts at runtime with a parse error.
+2. **Wrong placement:** in GTK4 a `GtkWindow` accepts **a single child** (`gtk_window_set_child`). A second `<child>` replaces `main_box` or triggers a warning, and the buttons and list disappear. The footer must go **inside `main_box`**, after `scrolled_window`; since `main_box` is vertical and `scrolled_window` has `vexpand`, the footer stays at the bottom.
+3. **Minor:** the window title is still `StudyStudio-0.0.12` while the project is at 0.0.13.
+
+Suggested structure:
+
+```xml
+        <child>
+          <object class="GtkScrolledWindow" id="scrolled_window">
+            ...
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox" id="footer">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">10</property>
+            <!-- footer widgets here, e.g. a GtkLabel -->
+          </object>
+        </child>
+      </object>   <!-- end of main_box -->
+    </child>
+  </object>       <!-- end of main_window -->
+```
+
+Validation before compiling: `xmllint --noout interface.ui` (syntax) and `gtk4-builder-tool validate interface.ui` (GTK4 structure, if installed).
+
+---
+
+## 2. Sending `subject.c` output to the footer
+
+`subject.c` has one `printf` (line 91) and ~30 `fprintf(stderr, ...)` calls. Chosen design: a **logging callback**, so `subject.c` stays independent of GTK. `main.c` registers a function that writes to the footer; if no logger is registered, messages still go to `stderr` as before.
+
+### Step 1 — Interface in `include/subject.h`
+
+Before the `#endif`:
+
+```c
+/* function that receives each message from subject.c */
+typedef void (*SubjectLogFunc)(const char *msg, void *user_data);
+
+void subject_set_logger(SubjectLogFunc fn, void *user_data);
+```
+
+### Step 2 — Implementation in `src/subject.c`
+
+Add `#include <stdarg.h>` with the other includes, then:
+
+```c
+static SubjectLogFunc g_log_fn = NULL;
+static void *g_log_data = NULL;
+
+void subject_set_logger(SubjectLogFunc fn, void *user_data) {
+    g_log_fn = fn;
+    g_log_data = user_data;
+}
+
+/* replaces printf/fprintf: same format, configurable destination */
+static void subject_log(const char *fmt, ...) {
+    char buf[1024];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    if (g_log_fn) g_log_fn(buf, g_log_data);
+    else fputs(buf, stderr);   /* no GUI: previous behaviour */
+}
+```
+
+Replace every call, e.g.:
+
+```c
+fprintf(stderr, "truncated archive: length header\n");   // before
+subject_log("truncated archive: length header\n");       // after
+```
+
+**Exception:** the `perror` calls after `fork()` (lines 776 and 945) run in the **child process**, which has its own memory copy, so the callback/widget are not really usable there. They must keep going to `stderr` (reaching the GUI would require reading them through a pipe in the parent).
+
+### Step 3 — Widget in `interface.ui`
+
+```xml
+<object class="GtkBox" id="footer">
+  <property name="orientation">horizontal</property>
+  <child>
+    <object class="GtkLabel" id="footer_label">
+      <property name="label">Listo</property>
+      <property name="xalign">0</property>
+      <property name="ellipsize">end</property>
+    </object>
+  </child>
+</object>
+```
+
+A `GtkLabel` shows only the **last** message (status bar style). For a full **history**, use a non-editable `GtkTextView` inside a fixed-height `GtkScrolledWindow` and append to its `GtkTextBuffer`.
+
+### Step 4 — Wiring in `src/main.c`
+
+```c
+/* callback that subject.c calls with each message */
+static void on_subject_log(const char *msg, void *user_data) {
+    GtkLabel *label = GTK_LABEL(user_data);
+    char *clean = g_strchomp(g_strdup(msg));   /* strip trailing \n */
+    gtk_label_set_text(label, clean);
+    g_free(clean);
+}
+```
+
+In `activate()`, after fetching the other widgets:
+
+```c
+GtkWidget *footer_label = GTK_WIDGET(gtk_builder_get_object(builder, "footer_label"));
+subject_set_logger(on_subject_log, footer_label);
+```
+
+The `g_print` calls in `main.c` (e.g. "Cargados %zu bytes…") can also be changed to update the label.
+
+### Caveats
+
+- **Threads:** `load_subject` currently runs on the GTK main thread (inside the dialog callback), so updating the label directly is safe. If loading is moved to a worker thread, the callback must use `g_idle_add()`, since GTK may only be touched from the main thread.
+- **Redraw:** while `load_subject` is busy the window does not redraw, so the label only shows the last message once it finishes. A worker thread would also fix this.
+
+---
+
+## 3. Extra bug found in `main.c`
+
+`state->window` is never assigned in `activate()`, but `on_load_clicked` uses `GTK_WINDOW(state->window)`. `g_malloc` does not zero memory, so it holds garbage. Fix: add `state->window = window;`.
+
+---
+
+## 4. Status and next steps
+
+- [ ] Fix the `footer` XML and move it inside `main_box`.
+- [ ] Update the window title to 0.0.13.
+- [ ] Add `SubjectLogFunc` / `subject_set_logger` to `subject.h` and `subject_log` to `subject.c`.
+- [ ] Replace `printf`/`fprintf(stderr, ...)` in `subject.c` with `subject_log` (except the post-`fork()` `perror` calls).
+- [ ] Register the logger in `activate()` and add `state->window = window;`.
+- [ ] Decide between `GtkLabel` (last message) and `GtkTextView` (history) for the footer.
