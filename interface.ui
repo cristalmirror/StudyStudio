@@ -43,5 +43,17 @@
         </child>
       </object>
     </child>
+    <child>
+      <object class="GtkBox" id="footer">
+        <property name="orientation">horizontal</property>
+        <child>
+          <object class="GtkLabel" id="footer_label">
+            <property name="label">Listo</property>
+            <property name="xalign">0</property>
+            <property name="ellipsize">end</property>
+          </object>
+        </child>
+      </object>
+    </child>
   </object>
 </interface>
