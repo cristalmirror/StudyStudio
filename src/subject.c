@@ -41,6 +41,10 @@
 #include <sys/types.h>
 #include <stdbool.h>
 #include "../include/subject.h"
+#include <stdarg.h>
+
+
+static void subject_log(const char *fmt, ...); /* definition for GUI print */
 
 
 /*
@@ -54,12 +58,14 @@ static int _wait_pid_os_opt(Subject *self, int *status) {
     #ifdef _WIN32
         if (WaitForSingleObject(self->proc_handle, INFINITE) == WAIT_FAILED) {
             fprintf(stderr, "Error waiting: %lu\n", GetLastError());
+            subject_log("Error waiting: %lu\n", GetLastError());
             return -1;
         }
         if (status != NULL) {
             DWORD exit_code;
             if (!GetExitCodeProcess(self->proc_handle, &exit_code)) {
                 fprintf(stderr, "Error querying exit code: %lu\n", GetLastError());
+                subject_log("Error querying exit code: %lu\n", GetLastError());
                 return -1;
             }
             *status = (exit_code == 0) ? 0 : 1;
@@ -89,6 +95,7 @@ static void _fatal(const char *msg) {
 
 void _read_subject(Subject *self) {
     printf("Valor >> %i\n",self->val);
+    subject_log("Valor >> %i\n",self->val);
 }
 
 /* 
@@ -152,12 +159,14 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
 
     if (!CreateDirectoryA(dest_dir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
         fprintf(stderr, "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
+        subject_log("CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
         return -1;
     }
 
     while (offset < size) {
         if (offset + 4 > size) {
             fprintf(stderr, "truncated archive: length header\n");
+            subject_log("truncated archive: length header\n");
             return -1;
         }
         uint32_t rel_len = _read_u32_le(buf + offset);
@@ -165,6 +174,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
         
         if (rel_len == 0 || rel_len >= MAX_PATH || offset + rel_len > size) {
             fprintf(stderr,"truncated or invalid relpath\n");
+            subject_log("truncated or invalid relpath\n");
             return -1;
         }
         char relpath[MAX_PATH];
@@ -172,11 +182,17 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
         relpath[rel_len] = '\0';
         offset += rel_len;
 
-        if (offset + 8 > size) { fprintf(stderr, "truncated archive: size header\n"); return -1; }
+        if (offset + 8 > size) { 
+            fprintf(stderr, "truncated archive: size header\n"); return -1; 
+            subject_log("truncated archive: size header\n");
+        }
         uint64_t filesize = _read_u64_le(buf + offset);
         offset += 8;
 
-        if (offset + filesize > size) { fprintf(stderr, "truncated archive: content\n"); return -1; }
+        if (offset + filesize > size) { 
+            fprintf(stderr, "truncated archive: content\n"); return -1; 
+            subject_log("truncated archive: content\n");
+        }
 
         char fullpath[MAX_PATH];
         if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", dest_dir, relpath) < 0) return -1;
@@ -187,6 +203,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
             snprintf(parent, sizeof(parent), "%.*s", (int)(last_slash - fullpath), fullpath);
             if (_win_mkdir_p(parent) != 0) {
                 fprintf(stderr, "mkdir(%s) failed\n", parent);
+                subject_log("mkdir(%s) failed\n", parent);
                 return -1;
             }
         }
@@ -195,6 +212,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
         if (!out) { fprintf(stderr, "fopen(%s) failed\n", fullpath); return -1; }
         if (filesize > 0 && fwrite(buf + offset, 1, (size_t)filesize, out) != (size_t)filesize) {
             fprintf(stderr, "fwrite(%s) failed\n", fullpath);
+            subject_log("fwrite(%s) failed\n", fullpath);
             fclose(out);
             return -1;
         }
@@ -236,18 +254,27 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
 int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
     (void)self;
 
-    if (!path || !out_buf || !out_size) return -1;
+    if (!path || !out_buf || !out_size) {
+        subject_log("Error: invalid arguments while loading subject\n");
+        return -1;
+    }
 
     *out_buf = NULL;
     *out_size = 0;
 
+    subject_log("Loading %s...\n", path);
+
     FILE *f = fopen(path, "rb");
-    if (!f) return -2;
+    if (!f) {
+        subject_log("Error: could not open %s\n", path);
+        return -2;
+    }
 
         lzma_stream strm = LZMA_STREAM_INIT;
         lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
         if (ret != LZMA_OK) {
             fclose(f);
+            subject_log("Error: could not initialize xz decoder (%d)\n", (int)ret);
             return -3;
         }
 
@@ -258,6 +285,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             free(outbuf);
             lzma_end(&strm);
             fclose(f);
+            subject_log("Error: out of memory allocating buffers\n");
             return -4;
         }
 
@@ -319,9 +347,19 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     if (ret != LZMA_STREAM_END) {
         free(acc);
-        if (ret == LZMA_MEM_ERROR) return -5;
-        if (ret == LZMA_FORMAT_ERROR) return -6;
-        if (ret == LZMA_DATA_ERROR) return -7;
+        if (ret == LZMA_MEM_ERROR) {
+            subject_log("Error: out of memory while decompressing %s\n", path);
+            return -5;
+        }
+        if (ret == LZMA_FORMAT_ERROR) {
+            subject_log("Error: %s is not a valid .xz file\n", path);
+            return -6;
+        }
+        if (ret == LZMA_DATA_ERROR) {
+            subject_log("Error: corrupted data in %s\n", path);
+            return -7;
+        }
+        subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
         return -8;
     }
 
@@ -332,8 +370,10 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_windows_buffer(self, acc, acc_size, dest_dir) != 0) {
         fprintf(stderr, "failed to unpack %s\n", path);
+        subject_log("Error: could not extract %s\n", path);
         return -9;
     }
+    subject_log("Subject loaded: %s (%lu bytes) into %s\n", path, (unsigned long)acc_size, dest_dir);
     return 0;
 
 }
@@ -414,6 +454,7 @@ static int _feed_bytes(lzma_stream *strm,
                     return 0;
                 }
                 fprintf(stderr, "lzma_code error: %d\n", (int)ret);
+                subject_log("lzma_code error: %d\n", (int)ret);
                 return -1;
             }
 
@@ -442,6 +483,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
     size_t relpath_size = strlen(relpath);
     if (relpath_size > UINT32_MAX) {
         fprintf(stderr, "Path too long: %s\n", relpath);
+        subject_log("Path too long: %s\n", relpath);
         return -1;
     }
 
@@ -449,6 +491,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
     FILE *f = fopen(fullpath, "rb");
     if (!f) {
         fprintf(stderr," fopen(%s) failed \n",fullpath);
+        subject_log("fopen(%s) failed \n",fullpath);
         return -1;
     } 
 
@@ -559,6 +602,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
         }
 
         fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
+        subject_log("FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
         return -1;
     }
     /* Go to directory with . and .. by self->is_dot_or_dotdot in loop*/
@@ -588,6 +632,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
            */
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
             fprintf(stderr, "Reparse point not supported: %s\n", relpath);
+            subject_log("Reparse point not supported: %s\n", relpath);
             FindClose(hfind);
             return -1;
         }
@@ -618,6 +663,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
     /* Erro system message */
     if (error != ERROR_NO_MORE_FILES) {
         fprintf(stderr, "FindNextFileA failed: %lu\n", (unsigned long)error);
+        subject_log("FindNextFileA failed: %lu\n", (unsigned long)error);
         return -1;
     }
 
@@ -636,6 +682,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     FILE *outf = fopen(*outpath, "wb");
     if (!outf) {
         fprintf(stderr,"fopen(%s) failed \n", *outpath);
+        subject_log("fopen(%s) failed \n", *outpath);
         return;
     }
 
@@ -646,6 +693,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     lzma_ret ret = lzma_easy_encoder(&strm, 6 | LZMA_PRESET_EXTREME, LZMA_CHECK_CRC64);
     if (ret != LZMA_OK) {
         fprintf(stderr, "lzma_easy_encoder failed: %d\n", ret);
+        subject_log("lzma_easy_encoder failed: %d\n", ret);
         fclose(outf);
         return;
     }
@@ -659,6 +707,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     char *dircopy = _fullpath(NULL, *dir, 0);
     if (!dircopy) {
         fprintf(stderr,"_fullpath(%s) filed\n", *dir);
+        subject_log("_fullpath(%s) filed\n", *dir);
         lzma_end(&strm);
         fclose(outf);
         return;
@@ -689,6 +738,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
 
     if (self->walk_directory(self, parent, base, &ctx) != 0) {
         fprintf(stderr, "walk_directory faild for %s\n", *dir);
+        subject_log("walk_directory faild for %s\n", *dir);
         lzma_end(&strm);
         fclose(outf);
         return;
@@ -715,6 +765,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         size_t wrote = OUT_BUF_SIZE - strm.avail_out;
         if (wrote > 0 && fwrite(outbuf, 1, wrote, outf) != wrote) {
             fprintf(stderr, "fwrite failed while finishing xz stream\n");
+            subject_log("fwrite failed while finishing xz stream\n");
             lzma_end(&strm);
             fclose(outf);
             return;
@@ -726,6 +777,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
 
     if (fret != LZMA_STREAM_END) {
         fprintf(stderr, "lzma_code error while finishing: %d\n",(int)fret);
+        subject_log("lzma_code error while finishing: %d\n",(int)fret);
         return;
     }
 
@@ -785,6 +837,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         kill(self->pid, SIGTERM);
         if (self->wait_pid_os_opt(self,NULL) == -1) {
             fprintf(stderr,"Error in the request %d\n",-1);
+            subject_log("Error in the request %d\n",-1);
         } 
         errno = save_errno;
         self->fatal("fopen output");
@@ -797,8 +850,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         kill(self->pid, SIGTERM);
         if (self->wait_pid_os_opt(self,NULL) == -1) {
             fprintf(stderr,"Error in the request %d\n",-1);
+            subject_log("Error in the request %d\n",-1);
         } 
         fprintf(stderr, "lzma_easy_encoder failed: %d\n", ret);
+        subject_log("lzma_easy_encoder failed: %d\n", ret);
         return;
     }
     /*Buffers (I/O)*/
@@ -818,6 +873,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
                 kill(self->pid, SIGTERM);
                 if (self->wait_pid_os_opt(self,NULL) == -1) {
                     fprintf(stderr,"Error in the request %d\n",-1);
+                    subject_log("Error in the request %d\n",-1);
                 } 
                 return;
             } else if (r == 0) {
@@ -852,6 +908,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
                 kill(self->pid, SIGTERM);
                 if (self->wait_pid_os_opt(self,NULL) == -1) {
                     fprintf(stderr,"Error in the request %d\n",-1);
+                    subject_log("Error in the request %d\n",-1);
                 } 
                 return;
             }
@@ -867,6 +924,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
             kill(self->pid, SIGTERM);
             if (self->wait_pid_os_opt(self,NULL) == -1) {
                 fprintf(stderr,"Error in the request %d\n",-1);
+                subject_log("Error in the request %d\n",-1);
             }   
             return;
         }
@@ -897,7 +955,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     }
 
     printf("Maked %s\n", *outpath);
-
+    subject_log("Maked %s\n", *outpath);
 }
 
 /*
@@ -928,6 +986,7 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
 static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, const char *dest_dir) {
     if (mkdir(dest_dir, 0755) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir(%s) failed: %s\n", dest_dir, strerror(errno));
+        subject_log("mkdir(%s) failed: %s\n", dest_dir, strerror(errno));
         return -1;
     }    
 
@@ -954,6 +1013,7 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
         if (w == -1) {
             if (errno == EINTR) continue;
             fprintf(stderr, "write to tar pipe failed: %s\n", strerror(errno));
+            subject_log("write to tar pipe failed: %s\n", strerror(errno));
             close(pipefd[1]);
             return -1;
         }
@@ -964,6 +1024,7 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
     int status;
     if (waitpid(pid, &status, 0) == -1) {
         fprintf(stderr,"waitpid failed: %s\n", strerror(errno));
+        subject_log("waitpid failed: %s\n", strerror(errno));
         return -1;
     }
 
@@ -983,19 +1044,28 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
 int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size) {
 
     /* Set init and check if data are fine */
-    if (!path || !out_buf || !out_size) return -1;
+    if (!path || !out_buf || !out_size) {
+        subject_log("Error: invalid arguments while loading subject\n");
+        return -1;
+    }
 
     *out_buf = NULL;
     *out_size = 0;
 
+    subject_log("Loading %s...\n", path);
+
     FILE *f = fopen(path, "rb");
-    if (!f) return -2;
+    if (!f) {
+        subject_log("Error: could not open %s\n", path);
+        return -2;
+    }
 
     // init lzma_stream
     lzma_stream strm = LZMA_STREAM_INIT;
     lzma_ret ret  = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
     if (ret != LZMA_OK) {
         fclose(f);
+        subject_log("Error: could not initialize xz decoder (%d)\n", (int)ret);
         return -3;
     }
 
@@ -1016,6 +1086,8 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
         free(outbuf);
         lzma_end(&strm);
         fclose(f);
+        subject_log("Error: out of memory allocating buffers\n");
+        return -4;
     }
 
     /* Dinamic Buffer accumulators */
@@ -1106,9 +1178,19 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
      */
     if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
         free(acc);
-        if (ret == LZMA_MEM_ERROR) return -5;
-        if (ret == LZMA_FORMAT_ERROR) return -6;
-        if (ret == LZMA_DATA_ERROR) return -7;
+        if (ret == LZMA_MEM_ERROR) {
+            subject_log("Error: out of memory while decompressing %s\n", path);
+            return -5;
+        }
+        if (ret == LZMA_FORMAT_ERROR) {
+            subject_log("Error: %s is not a valid .xz file\n", path);
+            return -6;
+        }
+        if (ret == LZMA_DATA_ERROR) {
+            subject_log("Error: corrupted data in %s\n", path);
+            return -7;
+        }
+        subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
         return -8; // error lzma unknow
     }
 
@@ -1120,13 +1202,65 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_tar_buffer(self, acc, acc_size, dest_dir) != 0) {
         fprintf(stderr, "failed to unpack %s\n", path);
+        subject_log("Error: could not extract %s\n", path);
         return -9;
     }
 
+    subject_log("Subject loaded: %s (%zu bytes) into %s\n", path, acc_size, dest_dir);
     return 0;
 }
 
 #endif
+
+/*
+ * Implementation of the interface to the abstradtion
+ * SubjectLogFunc. 
+ * 
+ * Realy i know that is so confuse using
+ * this method, but I think that this bullshit is necesary
+ * to not break SOLID arch.
+ */
+
+static SubjectLogFunc g_log_fn = NULL;
+static void *g_log_data = NULL;
+
+void subject_set_logger(SubjectLogFunc fn, void *user_data) {
+    /* Si multithreading: usar atomic_store o lock aquí */
+    g_log_fn = fn;
+    g_log_data = user_data;
+}
+
+static void subject_log(const char *fmt, ...) {
+    char stack_buf[1024];
+    char *buf = stack_buf;
+    va_list args;
+    int needed;
+
+    va_start(args, fmt);
+    needed = vsnprintf(stack_buf, sizeof(stack_buf), fmt, args);
+    va_end(args);
+
+    if (needed < 0) return;                      /* format error */
+
+    if ((size_t)needed >= sizeof(stack_buf)) {
+        buf = malloc((size_t)needed + 1);
+        if (!buf) {                              /* OOM: */
+            if (g_log_fn) g_log_fn("[log truncated: OOM]", g_log_data);
+            else fputs("[log truncated: OOM]\n", stderr);
+            return;
+        }
+        va_start(args, fmt);                     /* re-exec with big buffer */
+        vsnprintf(buf, (size_t)needed + 1, fmt, args);
+        va_end(args);
+    }
+
+    if (g_log_fn) g_log_fn(buf, g_log_data);
+    else fputs(buf, stderr);
+
+    if (buf != stack_buf) free(buf);
+}
+
+
 /*destructor*/
 void _close_subject(Subject *self) {
     if (self != NULL) {
