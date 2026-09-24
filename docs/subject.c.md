@@ -1,6 +1,6 @@
 # `src/subject.c`
 
-Status: draft for user approval; version 0.0.13.
+Status: draft for user approval; version 0.0.14.
 
 ## Purpose and dependencies
 
@@ -20,6 +20,12 @@ pointers, including the Windows-only `is_dot_or_dotdot`, `write_u32_le`,
 `feed_bytes`, and `walk_directory` methods. `_close_subject` frees the object
 only. `_read_subject` prints its integer value. `_fatal` calls `perror` and
 `exit(EXIT_FAILURE)`.
+
+## Logging
+
+As of version 0.0.14, `subject_set_logger` stores a process-wide `SubjectLogFunc` and its `user_data` (see [subject.h](subject.h.md#logging)). The private `subject_log(fmt, ...)` formats with `vsnprintf` into a 1024-byte stack buffer, retrying with a heap buffer of the exact size when the message is longer (on allocation failure it reports `[log truncated: OOM]`). The result goes to the registered callback, or to `stderr` when none is registered. `subject_log` is forward-declared right after the includes so it can be used by both platform branches before its definition near the end of the file.
+
+Most existing `fprintf(stderr, ...)`/`printf` diagnostics are kept and followed by an equivalent `subject_log` call, so messages reach both the terminal and the GUI. The `perror` calls in child processes created by `fork()` stay on `stderr` only, since the child's copy of the callback cannot update the parent's window. In `_unpack_windows_buffer`, the `subject_log` calls for `truncated archive: size header` and `truncated archive: content` are placed after the `return -1`, so they are never reached.
 
 `_wait_pid_os_opt` uses `waitpid` on POSIX, retrying interrupted waits, or `WaitForSingleObject` and optionally `GetExitCodeProcess` on Windows. It returns `-1` on API failure and `0` otherwise. When requested, it normalizes child status to `0` for success and `1` for failure.
 
@@ -108,13 +114,32 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 | `-1` | Missing path or output pointer. |
 | `-2` | Input file could not be opened. |
 | `-3` | Decoder initialization failed. |
+| `-4` | Input/output buffers could not be allocated. |
 | `-5` | Final mapped decoder/allocation memory error. |
 | `-6` | XZ format error. |
 | `-7` | Data error, also used for an input read failure. |
 | `-8` | Other decoder error. |
 | `-9` | Decoding succeeded, but deriving the extraction directory or unpacking to disk failed. `*out_buf`/`*out_size` are still assigned at this point; the caller still owns a valid decoded buffer even though extraction failed. |
 
-These return codes describe the current implementation, not a complete or reliable error contract for every failure path. The Windows implementation returns the same codes for the same conditions, plus the same new `-9` for its own (currently non-compiling) unpacking attempt.
+As of version 0.0.14, both implementations report each result through `subject_log` (see [Logging](#logging)):
+
+| Result | Message |
+| --- | --- |
+| start | `Loading <path>...` |
+| `-1` | `Error: invalid arguments while loading subject` |
+| `-2` | `Error: could not open <path>` |
+| `-3` | `Error: could not initialize xz decoder (<code>)` |
+| `-4` | `Error: out of memory allocating buffers` |
+| `-5` | `Error: out of memory while decompressing <path>` |
+| `-6` | `Error: <path> is not a valid .xz file` |
+| `-7` | `Error: corrupted data in <path>` |
+| `-8` | `Error: unknown lzma error (<code>) in <path>` |
+| `-9` | `Error: could not extract <path>` |
+| `0` | `Subject loaded: <path> (<N> bytes) into <dest_dir>` |
+
+The Windows success message prints the size with `%lu` and an `unsigned long` cast, since the MinGW-w64 `vsnprintf` does not reliably support `%zu`.
+
+These return codes describe the current implementation, not a complete or reliable error contract for every failure path. The Windows implementation returns the same codes for the same conditions, plus the same `-9` for its own unpacking step.
 
 ## Extraction
 
@@ -124,13 +149,9 @@ Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolv
 
 The Linux `_derive_extract_dir` no longer has the defects from the previous review (`strrchr`/`snprintf` typos, missing `static int` return type all fixed) and now reads correctly. A new helper, `_unpack_tar_buffer(self, buf, size, dest_dir)`, `mkdir`s the destination and forks `tar -xf - -C <dest_dir>`, writing the decoded TAR bytes to it through a pipe — the load-side mirror of the existing `tar -cf -` save path. `_load_subject` calls both after a successful decode (see [Loading](#loading)); this is the only extraction path currently expected to compile and run.
 
-### Windows: still does not compile
+### Windows: compiles, not yet tested at runtime
 
-`_derive_extract_dir` still has the previously documented defect: `strrchr(base, sizeof(base), "%s", '.')` passes four arguments to `strrchr`, which takes two (`const char *`, `int`); this does not compile. It should read `strrchr(base, '.')`.
-
-A new helper, `_unpack_windows_buffer(self, buf, size, dest_dir)`, parses the `length + path + size + content` records written by `_save_subject` and writes each one to disk (creating intermediate subfolders with `_win_mkdir_p`). It has its own new defect: `fprintf(stderrm "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());` is missing the comma after `stderr` and instead runs it together into a single, undeclared identifier `stderrm`; this does not compile. It should read `fprintf(stderr, "CreateDirectoryA(%s) failed: %lu\n", ...)`.
-
-Both defects mean the Windows build of `_load_subject` will not compile as currently written, even though it is now wired the same way as the Linux side.
+The defects described in earlier versions of this document (the four-argument `strrchr` call in `_derive_extract_dir` and the `stderrm` typo in `_unpack_windows_buffer`) are fixed: as of version 0.0.14, `make win64` builds `_load_subject` with its extraction path. `_unpack_windows_buffer(self, buf, size, dest_dir)` parses the `length + path + size + content` records written by `_save_subject` and writes each one to disk, creating intermediate subfolders with `_win_mkdir_p`. This path has not been exercised on Windows yet.
 
 ## Known implementation limitations
 
@@ -138,7 +159,8 @@ Both defects mean the Windows build of `_load_subject` will not compile as curre
   Linux, `_load_subject` now unpacks the decoded TAR bytes back into
   individual files/directories through `_unpack_tar_buffer` (see
   [Extraction](#extraction)); the equivalent Windows unpacking
-  (`_unpack_windows_buffer`) is wired the same way but does not compile yet.
+  (`_unpack_windows_buffer`) is wired the same way and compiles, but has not
+  been tested at runtime.
   Neither `_save_subject` nor `_load_subject` is explicitly wired into
   `main.c`/the UI, but since `main.c` already calls `load_subject`, the
   Linux extraction now runs as a side effect of the existing "Load Subject"
@@ -164,10 +186,6 @@ Both defects mean the Windows build of `_load_subject` will not compile as curre
   consumed it all.
 - Linux only: several save error paths leave the read side of the pipe open;
   some final I/O results are not checked.
-- Linux only: if initial load-buffer allocation fails in `_load_subject`,
-  cleanup runs but execution continues with released resources instead of
-  returning. The Windows `_load_subject` added the missing `return` for this
-  case.
 - Linux only: decoder errors are not all handled with an immediate loop exit,
   and final acceptance includes `LZMA_OK` instead of requiring
   `LZMA_STREAM_END`. The Windows `_load_subject` requires `LZMA_STREAM_END`

@@ -493,3 +493,36 @@ The `g_print` calls in `main.c` (e.g. "Cargados %zu bytes…") can also be chang
 - [ ] Replace `printf`/`fprintf(stderr, ...)` in `subject.c` with `subject_log` (except the post-`fork()` `perror` calls).
 - [ ] Register the logger in `activate()` and add `state->window = window;`.
 - [ ] Decide between `GtkLabel` (last message) and `GtkTextView` (history) for the footer.
+
+---
+
+### cristalmirror IA secion ### [2026-09-24]
+
+Log of an AI-assisted session on StudyStudio. Covers the implementation of the footer designed in the 2026-09-23 session. Unlike previous sessions, part of the code was applied by the AI at the user's request; the rest was typed by the user following the review below.
+
+---
+
+## 1. Compilation review
+
+The first build of the footer code failed in `src/subject.c`:
+
+1. **Type name mismatch:** `include/subject.h` declared `SubjectLogFun`, while `src/subject.c` used `SubjectLogFunc` (unknown type, and every call through `g_log_fn` failed). Fixed by renaming the typedef in the header to `SubjectLogFunc`.
+2. **Implicit declaration:** `subject_log` was called from line 58 onwards but defined `static` near the end of the file, so GCC created an implicit non-`static` declaration that conflicted with the definition. Fixed with a forward declaration right after the includes: `static void subject_log(const char *fmt, ...);`.
+
+## 2. Runtime review
+
+1. **Footer replaced the whole UI:** it was a second child of `main_window`; moved inside `main_box` after `scrolled_window` (applied by the AI).
+2. **Builder used after release:** `activate()` fetched `footer_label` after `g_object_unref(builder)`. Fixed by moving the lookup and `subject_set_logger` before the `unref`.
+3. **Footer always showed `Listo`:** `_load_subject` only called `subject_log` on the `-9` path; success and the other errors returned silently, and the messages in `main.c` use `g_print` (terminal only). A `subject_log` call was added before every `return` of both `_load_subject` implementations (applied by the AI; messages in English). The Linux version was also missing the `return -4` after a failed buffer allocation.
+
+## 3. Status and next steps
+
+- [x] Fix the `footer` XML and move it inside `main_box`.
+- [x] Update the window title (now 0.0.14).
+- [x] Add `SubjectLogFunc` / `subject_set_logger` to `subject.h` and `subject_log` to `subject.c`.
+- [x] Route `subject.c` diagnostics through `subject_log` (except the post-`fork()` `perror` calls).
+- [x] Register the logger in `activate()`.
+- [ ] Add `state->window = window;` in `activate()` (use `g_new0` for `AppState`).
+- [ ] Move the unreachable `subject_log` calls after `return -1` in `_unpack_windows_buffer` before the `return`.
+- [ ] Linux `_save_subject`: the `"/foo"` branch copies into `parent` instead of `base`; replace the `strncpy` calls with `snprintf`.
+- [ ] Decide between `GtkLabel` (last message) and `GtkTextView` (history) for the footer.

@@ -1,6 +1,6 @@
 # `resources.c`
 
-Status: draft for user approval; version 0.0.13.
+Status: draft for user approval; version 0.0.14.
 
 ## Purpose and behavior
 

@@ -1,19 +1,19 @@
 # `Makefile`
 
-Status: draft for user approval; version 0.0.13.
+Status: draft for user approval; version 0.0.14.
 
 ## Purpose
 
-Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.0.13`.
+Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.0.14`.
 
 | Target | Behavior |
 | --- | --- |
 | `all` | Requests both Linux and Windows builds; default target. |
-| `linux` | Builds `build/studystudio-0.0.13_linux` with GCC. |
-| `win64` | Builds `build/studystudio-0.0.13_win64.exe` with MinGW-w64. |
-| `debug` | Builds `build/studystudio-0.0.13_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
+| `linux` | Builds `build/studystudio-0.0.14_linux` with GCC. |
+| `win64` | Builds `build/studystudio-0.0.14_win64.exe` with MinGW-w64. |
+| `debug` | Builds `build/studystudio-0.0.14_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
-| `win64-debug` | Builds `build/studystudio-0.0.13_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
+| `win64-debug` | Builds `build/studystudio-0.0.14_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
 | `setup` | Creates platform object directories, including both debug ones. |
 | `clean` | Empties the contents of `build` and removes the root-level `resources.c`, leaving the `build` directory itself in place. |
 

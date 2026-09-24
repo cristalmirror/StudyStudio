@@ -1,10 +1,10 @@
 # `interface.ui`
 
-Status: draft for user approval; version 0.0.13.
+Status: draft for user approval; version 0.0.14.
 
 ## Purpose and structure
 
-Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `StudyStudio-0.0.13`, with a default size of 300 by 400.
+Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `StudyStudio-0.0.14`, with a default size of 300 by 400.
 
 | Object ID | Role |
 | --- | --- |
@@ -15,22 +15,22 @@ Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `Stu
 | `load_button` | Button labeled `📂 Cargar Materia`. |
 | `scrolled_window` | Vertically expanding scroll container. |
 | `target_box` | Vertical destination for buttons created at runtime. |
-| `footer` | Work in progress: container intended to show the messages printed by `src/subject.c` (see below). |
+| `footer` | Horizontal container at the bottom of `main_box`, below `scrolled_window` (see below). |
+| `footer_label` | Status label inside `footer`; starts as `Listo` and shows the last message reported by `src/subject.c`. |
 
-The XML does not bind callbacks. `src/main.c` looks up `main_window`, `add_button`, `load_button`, and `target_box`, then connects signals in C. Renaming those IDs requires updating the corresponding lookups. The resource manifest embeds this file at `/org/studystudio/interface.ui`.
+The XML does not bind callbacks. `src/main.c` looks up `main_window`, `add_button`, `load_button`, `target_box`, and `footer_label`, then connects signals and the footer logger in C. Renaming those IDs requires updating the corresponding lookups. The resource manifest embeds this file at `/org/studystudio/interface.ui`.
 
-## Footer (work in progress)
+## Footer
 
-A `footer` `GtkBox` is being added so that every message printed by `src/subject.c` is shown in the window instead of only on the terminal. The current draft is not usable yet:
+As of version 0.0.14 the `footer` is the last child of `main_box`, after `scrolled_window`. A GTK4 `GtkWindow` accepts a single child; in 0.0.13 the footer was declared as a second child of `main_window` and replaced `main_box`, hiding the buttons and the list. Since `main_box` is vertical and `scrolled_window` has `vexpand`, the footer stays at the bottom of the window.
 
-- It is declared as a second `<child>` of `main_window`. A GTK4 `GtkWindow` accepts a single child, so the footer must move inside `main_box`, after `scrolled_window`; the vertical orientation of `main_box` and the `vexpand` of `scrolled_window` then keep it at the bottom.
-- Its `<property name>` line is malformed XML. `glib-compile-resources` does not validate it, so the build succeeds but `gtk_builder_new_from_resource()` in `src/main.c` aborts at startup. Check the file with `xmllint --noout interface.ui` or `gtk4-builder-tool validate interface.ui` before building.
+`footer_label` is a `GtkLabel` with `xalign` 0, `ellipsize` `end`, and `hexpand` true, so long messages are cut with an ellipsis instead of widening the window. It shows only the **last** message (status-bar style), not a history. `src/main.c` registers it with `subject_set_logger`, so every message passed to `subject_log` in `src/subject.c` replaces its text (see [main.c](main.c.md) and [subject.h](subject.h.md#logging)).
 
-Planned design: the footer holds a `GtkLabel` with ID `footer_label` (last message, status-bar style) or a non-editable `GtkTextView` in a fixed-height `GtkScrolledWindow` (full history). `src/subject.c` exposes a logging callback (`subject_set_logger`) instead of depending on GTK, and `src/main.c` registers a callback that writes each message to the footer widget. The `perror` calls in the child processes created by `fork()` stay on `stderr`. See the 2026-09-23 session in [prototype_ia.md](prototype_ia.md) for the reference code.
+Check the file with `xmllint --noout interface.ui` or `gtk4-builder-tool validate interface.ui` before building: `glib-compile-resources` does not validate it, and a malformed file only fails at startup in `gtk_builder_new_from_resource()`.
 
 ## Current limitations
 
-The layout contains no file chooser or archive-loading workflow. Labels remain in Spanish; English documentation does not change the application language.
+The layout contains no file chooser or archive-loading workflow. Labels (including the initial `Listo` of `footer_label`) remain in Spanish, while the messages written to the footer by `src/subject.c` are in English; English documentation does not change the application language.
 
 ## SOLID development direction
 

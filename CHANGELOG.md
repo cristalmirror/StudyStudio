@@ -10,26 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Known Issues
-- Windows's `load_subject` still does not extract the archive back into
-  files on disk: `_derive_extract_dir`'s malformed `strrchr` call and a
-  `stderr`/`stderrm` typo in `_unpack_windows_buffer` mean the Windows
-  extraction path does not compile yet, even though it is wired into
-  `_load_subject` the same way as Linux, which does compile and correctly
-  unpacks the decoded TAR bytes via `_unpack_tar_buffer` (see
-  `docs/subject.c.md#extraction`).
+- Windows's `load_subject` extraction path (`_derive_extract_dir` +
+  `_unpack_windows_buffer`) now compiles, but it has not been tested at
+  runtime on Windows yet (see `docs/subject.c.md#extraction`).
 - Neither `_save_subject` nor `_load_subject` is explicitly wired into
   `main.c`/the UI as a dedicated call, but since `main.c` already calls
-  `load_subject` for the "Load Subject" button, Linux extraction now runs
-  as a side effect of that existing button.
+  `load_subject` for the "Load Subject" button, extraction runs as a side
+  effect of that existing button.
 - The internal Windows entry format has no magic value, version, or
   end-of-archive marker yet; it must not be treated as a stable archive
   format.
 - The Windows entry format records only regular files, so empty directories
   cannot be restored.
-- `interface.ui`: the in-progress `footer` is declared as a second child of
-  `main_window` (a GTK4 `GtkWindow` accepts only one) and contains a
-  malformed `<property name>` line, so `gtk_builder_new_from_resource()`
-  aborts at startup until it is fixed (see `docs/interface.ui.md#footer-work-in-progress`).
+- `src/main.c`: `AppState.window` is never assigned, but `on_load_clicked`
+  passes it as the parent window of the file chooser.
+- `src/subject.c`: in `_unpack_windows_buffer`, the `subject_log` calls for
+  the truncated size header/content errors come after `return -1` and are
+  never reached.
+- `src/subject.c`: the footer only shows the final message of a load, because
+  `load_subject` runs on the GTK main thread and the window is not redrawn
+  until it returns.
 
 ### Planned
 - Implement CSS custom styles for widgets
@@ -40,6 +40,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.0.14] - 2026-09-24
+
+### Added
+- `include/subject.h`: `SubjectLogFunc` callback type and
+  `subject_set_logger(fn, user_data)`, so the GUI can receive every message
+  from `src/subject.c` without `subject.c` depending on GTK (see
+  `docs/subject.h.md#logging`).
+- `src/subject.c`: `subject_set_logger` and the private `subject_log(fmt,
+  ...)`, which formats the message (with a heap fallback for messages longer
+  than 1024 bytes) and forwards it to the registered callback, or to `stderr`
+  when none is registered. The existing `fprintf`/`printf` diagnostics are
+  now also sent through `subject_log`.
+- `src/subject.c`: both `_load_subject` implementations report every result
+  through `subject_log`: `Loading <path>...`, one English error message per
+  return code (`-1` to `-9`), and `Subject loaded: <path> (<N> bytes) into
+  <dir>` on success (see `docs/subject.c.md#loading`).
+- `src/main.c`: `on_subject_log` callback, which writes each message to
+  `footer_label`; `activate` registers it with `subject_set_logger`.
+- `interface.ui`: `footer_label` (`GtkLabel`, initial text `Listo`) inside
+  the `footer` box.
+
+### Fixed
+- `interface.ui`: the `footer` was declared as a second child of
+  `main_window`; a GTK4 `GtkWindow` accepts a single child, so it replaced
+  `main_box` and hid the buttons and the list. It is now the last child of
+  `main_box`, below `scrolled_window`.
+- `src/main.c`: `footer_label` is fetched before `g_object_unref(builder)`,
+  not after it (use of a released builder).
+- `src/subject.c`: the Linux `_load_subject` now returns `-4` when its
+  input/output buffers cannot be allocated, instead of continuing with
+  released resources.
+- `interface.ui`: the window title still read `StudyStudio-0.0.12`.
+
+### Changed
+- Bumped the project version to `0.0.14`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version`/`Last edited` fields of the file headers in
+  `src/main.c`, `src/subject.c`, and `include/subject.h`, and the
+  "Status"/baseline version lines and `studystudio-0.0.x` mentions across
+  `docs/*.md`.
+- `docs/interface.ui.md`: replaced "Footer (work in progress)" with a
+  "Footer" section describing the final layout and `footer_label`.
+- `docs/main.c.md`: documented `on_subject_log`, the footer registration in
+  `activate`, and the unassigned `AppState.window`.
+- `docs/subject.h.md`, `docs/subject.c.md`: new "Logging" sections; added the
+  `-4` code and the per-code footer messages to the loading tables; the
+  Windows extraction section now reflects that it compiles.
+- `docs/README.md`: the overview mentions the footer and the current state of
+  Windows extraction.
+- `docs/prototype_ia.md`: added the 2026-09-24 session log.
 
 ## [0.0.13] - 2026-09-22
 

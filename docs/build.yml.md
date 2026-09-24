@@ -1,6 +1,6 @@
 # `.github/workflows/build.yml`
 
-Status: draft for user approval; version 0.0.13.
+Status: draft for user approval; version 0.0.14.
 
 ## Purpose
 
@@ -13,8 +13,8 @@ Defines a GitHub Actions workflow that builds StudyStudio on every push and pull
 | Checkout code | Clones the repository via `actions/checkout@v4`. |
 | Build Docker toolchain image | Builds the `studystudio-builder` image from the repository `Dockerfile`. |
 | Compile Linux + Windows binaries (release) | Runs `make all` inside the container, bind-mounting `src`, `include`, `build`, `Makefile`, `resources.xml`, and `interface.ui` — the same command documented in the [repository README](../README.md#compilation). |
-| Compile Linux binary (debug) | Runs `make debug` inside the same container and volume layout, producing `build/studystudio-0.0.13_linux_debug` (see [Makefile](Makefile.md)). |
-| Compile Windows binary (debug) | Runs `make win64-debug` inside the same container and volume layout, producing `build/studystudio-0.0.13_win64_debug.exe` (see [Makefile](Makefile.md)). |
+| Compile Linux binary (debug) | Runs `make debug` inside the same container and volume layout, producing `build/studystudio-0.0.14_linux_debug` (see [Makefile](Makefile.md)). |
+| Compile Windows binary (debug) | Runs `make win64-debug` inside the same container and volume layout, producing `build/studystudio-0.0.14_win64_debug.exe` (see [Makefile](Makefile.md)). |
 | Verify binaries were produced | Fails the job if the release Linux binary, release Windows binary, debug Linux binary, or debug Windows binary is missing from `build/`. |
 | Upload binaries as artifacts | Publishes the four binaries via `actions/upload-artifact@v4`, downloadable from the workflow run for 90 days by default. |
 

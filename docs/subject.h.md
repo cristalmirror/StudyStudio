@@ -1,6 +1,6 @@
 # `include/subject.h`
 
-Status: draft for user approval; version 0.0.13.
+Status: draft for user approval; version 0.0.14.
 
 ## Purpose
 
@@ -27,6 +27,17 @@ effect was leaking a private, `static` implementation detail into every other
 translation unit that includes `subject.h` — including `main.c` on the
 Windows build, which does not define or call it, and so saw it flagged as
 declared but never defined.
+
+## Logging
+
+As of version 0.0.14 the header declares a logging interface so the GUI can show every message from `src/subject.c` without `subject.c` depending on GTK:
+
+```c
+typedef void (*SubjectLogFunc)(const char *msg, void *user_data);
+void subject_set_logger(SubjectLogFunc fn, void *user_data);
+```
+
+`subject_set_logger` registers one process-wide callback and its `user_data` (it is not per-`Subject`). Messages are passed already formatted and usually end with `\n`; the string is only valid during the call, so the callback must copy it if it keeps it. Passing `NULL` as `fn` restores the default behavior of writing messages to `stderr`. Registration is not thread-safe. `src/main.c` registers a callback that writes to the window footer (see [main.c](main.c.md)).
 
 ## Current interface
 
