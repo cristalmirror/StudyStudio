@@ -98,6 +98,13 @@ static void on_load_dialog_respose(GtkNativeDialog *dialog, int respose, gpointe
     }
     g_object_unref(dialog);
 }
+/* callback that subject.c calls with each message */
+static void on_subject_log(const char *msg, void *user_data) {
+    GtkLabel *label = GTK_LABEL(user_data);
+    char *clean = g_strchomp(g_strdup(msg));   /* strip trailing \n */
+    gtk_label_set_text(label, clean);
+    g_free(clean);
+}
 
 /*
   function of activate
@@ -128,6 +135,11 @@ static void activate(GtkApplication *app, gpointer user_data) {
     g_signal_connect(load_button,"clicked",G_CALLBACK(on_load_clicked), state);
     // print and clean
     gtk_window_present(GTK_WINDOW(window));
+    
+
+    /* footer implementations */
+    GtkWidget *footer_label = GTK_WIDGET(gtk_builder_get_object(builder, "footer_label"));
+    subject_set_logger(on_subject_log, footer_label);
     g_object_unref(builder);
 }
 
