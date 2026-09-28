@@ -18,20 +18,22 @@ above the existing purpose comment.
 field (`proc_handle` on Windows, `pid` elsewhere), and assigns all operation
 pointers, including the Windows-only `is_dot_or_dotdot`, `write_u32_le`,
 `feed_bytes`, and `walk_directory` methods. `_close_subject` frees the object
-only. `_read_subject` prints its integer value. `_fatal` calls `perror` and
-`exit(EXIT_FAILURE)`.
+only. `_read_subject` prints its integer value to `stdout` and also reports it
+through `subject_log`. `_fatal` calls `perror` and `exit(EXIT_FAILURE)`.
+`write_u32_le` (and the private `_write_u64_le`) are currently unused:
+`_write_file_entry_to_lzma` builds the length and size headers inline.
 
 ## Logging
 
 As of version 0.0.14, `subject_set_logger` stores a process-wide `SubjectLogFunc` and its `user_data` (see [subject.h](subject.h.md#logging)). The private `subject_log(fmt, ...)` formats with `vsnprintf` into a 1024-byte stack buffer, retrying with a heap buffer of the exact size when the message is longer (on allocation failure it reports `[log truncated: OOM]`). The result goes to the registered callback, or to `stderr` when none is registered. `subject_log` is forward-declared right after the includes so it can be used by both platform branches before its definition near the end of the file.
 
-Most existing `fprintf(stderr, ...)`/`printf` diagnostics are kept and followed by an equivalent `subject_log` call, so messages reach both the terminal and the GUI. The `perror` calls in child processes created by `fork()` stay on `stderr` only, since the child's copy of the callback cannot update the parent's window. In `_unpack_windows_buffer`, the `subject_log` calls for `truncated archive: size header` and `truncated archive: content` are placed after the `return -1`, so they are never reached.
+Most existing `fprintf(stderr, ...)`/`printf` diagnostics are kept and followed by an equivalent `subject_log` call, so messages reach both the terminal and the GUI. The `perror` calls in child processes created by `fork()` stay on `stderr` only, since the child's copy of the callback cannot update the parent's window. Some parent-side diagnostics are also still terminal-only: the `perror` calls in `_wait_pid_os_opt` (POSIX `waitpid`) and in the Linux `_save_subject` read/write loop, the Linux `lzma_code error` and `tar failed` messages, the `fopen` failure in `_unpack_windows_buffer`, the Windows `Maked <path>` success message, and `_fatal`. In `_unpack_windows_buffer`, the `subject_log` calls for `truncated archive: size header` and `truncated archive: content` are placed after the `return -1`, so they are never reached.
 
 `_wait_pid_os_opt` uses `waitpid` on POSIX, retrying interrupted waits, or `WaitForSingleObject` and optionally `GetExitCodeProcess` on Windows. It returns `-1` on API failure and `0` otherwise. When requested, it normalizes child status to `0` for success and `1` for failure.
 
 ## Saving
 
-`_save_subject(self, msg, dir, outpath)` expects pointers to directory and destination path strings. It does not validate these arguments; `msg` is unused.
+`_save_subject(self, msg, dir, outpath)` expects pointers to directory and destination path strings; `msg` is unused on both platforms. The Linux implementation does not validate these arguments. The Windows implementation returns early if `self`, `dir`, `*dir`, or `outpath` is `NULL`.
 
 Linux saving currently has the working implementation:
 
@@ -100,11 +102,11 @@ As of version 0.0.8, Windows has its own native `_load_subject`, functionally
 equivalent to the Linux one for decoding: it decompresses the full `.xz` file into a single
 heap-allocated buffer with `lzma_stream_decoder`, growing the accumulator
 geometrically, and includes a safety exit for a truncated stream that never
-reaches `LZMA_STREAM_END`. It now also attempts to parse the `length + path +
-size + content` records written by `_save_subject` and write them to disk
-(`_derive_extract_dir` + `_unpack_windows_buffer`, mirroring the Linux wiring),
-but as written this does not compile on Windows (see
-[Extraction](#extraction) below), so this path remains unverified.
+reaches `LZMA_STREAM_END`. It also parses the `length + path + size + content`
+records written by `_save_subject` and writes them to disk
+(`_derive_extract_dir` + `_unpack_windows_buffer`, mirroring the Linux wiring).
+As of version 0.0.14 this path compiles, but it has not been tested at runtime
+(see [Extraction](#extraction) below).
 
 For valid output pointers, output values are initialized to `NULL` and zero before opening the file. On success, the caller owns the returned buffer and must use `free` after consumption. Inputs and path strings remain caller-owned.
 
@@ -125,7 +127,7 @@ As of version 0.0.14, both implementations report each result through `subject_l
 
 | Result | Message |
 | --- | --- |
-| start | `Loading <path>...` |
+| start | `Loading <path>...` (logged after argument validation, so a `-1` result is reported without it) |
 | `-1` | `Error: invalid arguments while loading subject` |
 | `-2` | `Error: could not open <path>` |
 | `-3` | `Error: could not initialize xz decoder (<code>)` |
@@ -143,7 +145,7 @@ These return codes describe the current implementation, not a complete or reliab
 
 ## Extraction
 
-Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolving the archive path to an absolute path (`_fullpath` on Windows, `realpath` on Linux), taking its last path component, and dropping everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped. See [prototype_ia.md](prototype_ia.md) for the full design this is based on.
+Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolving the archive path to an absolute path (`_fullpath` on Windows, `realpath` on Linux), taking its last path component, and dropping everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped. If the archive name has no extension (or only a leading dot, such as `.xz`), nothing is stripped and `dest_dir` equals the archive's own path. On Linux, `mkdir` then fails with `EEXIST`, which is accepted, `tar -C` fails on the file, and `_load_subject` returns `-9`. See [prototype_ia.md](prototype_ia.md) for the full design this is based on.
 
 ### Linux: compiles and is wired in
 
@@ -190,6 +192,17 @@ The defects described in earlier versions of this document (the four-argument `s
   and final acceptance includes `LZMA_OK` instead of requiring
   `LZMA_STREAM_END`. The Windows `_load_subject` requires `LZMA_STREAM_END`
   strictly.
+- Linux only: `_unpack_tar_buffer` does not ignore `SIGPIPE`. If `tar -xf`
+  exits early (for example, when a valid `.xz` does not contain a TAR stream),
+  the next `write` to the pipe raises `SIGPIPE` and terminates the whole
+  application. On a `write` failure it also returns without `waitpid`,
+  leaving a zombie child.
+- Windows only: `_unpack_windows_buffer` does not reject `relpath` values that
+  contain `..` components or are absolute, so a crafted archive can write
+  outside `dest_dir`. The `offset + filesize` check can also overflow for very
+  large `filesize` values.
+- Both platforms: `subject_set_logger` stores the callback in unsynchronized
+  globals; registering a logger while another thread logs is a data race.
 - Both platforms: decoded data is accumulated without an application size
   limit, and capacity growth lacks overflow checks.
 
