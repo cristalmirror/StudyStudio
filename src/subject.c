@@ -789,7 +789,9 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
 
     int pipefd[2];
     if (pipe(pipefd) == -1) self->fatal("pipe");
-    if (self->pid == -1) self->fatal("fork");   
+    self->pid = fork();
+    if (self->pid == -1) self->fatal("fork");
+    
     if (self->pid == 0) {
       /**
        * Child process: execute `tar -cf - -C <parent_of_dir> <basename>`.
