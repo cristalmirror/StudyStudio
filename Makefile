@@ -65,7 +65,7 @@ linux: $(BUILD_DIR)/$(NAME)_linux
 
 $(BUILD_DIR)/$(NAME)_linux: $(OBJS_LINUX)
 	$(CC_LINUX) $(OBJS_LINUX) -o $@ $(LDFLAGS_LINUX)
-	@echo -e "\033[32m[✓] Compilated for Linux:\033[0m $@\n"
+	@echo -e "\033[32m[✓] Compiled for Linux:\033[0m $@\n"
 
 $(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
@@ -78,7 +78,7 @@ debug: $(BUILD_DIR)/$(NAME)_linux_debug
 
 $(BUILD_DIR)/$(NAME)_linux_debug: $(OBJS_LINUX_DEBUG)
 	$(CC_LINUX) $(OBJS_LINUX_DEBUG) -o $@ $(LDFLAGS_LINUX)
-	@echo -e "\033[32m[✓] Compilated for Linux (debug): \033[0m $@ \n"
+	@echo -e "\033[32m[✓] Compiled for Linux (debug): \033[0m $@ \n"
 
 $(BUILD_DIR)/linux-debug/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_LINUX) $(CFLAGS_LINUX_DEBUG) -c $< -o $@
@@ -94,7 +94,7 @@ win64: $(BUILD_DIR)/$(NAME)_win64.exe
 
 $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 	$(CC_WIN64) $(OBJS_WIN64) -o $@ $(LDFLAGS_WIN)
-	@echo -e "\033[31m[✓] Compilated for Windows:\033[0m $@\n"
+	@echo -e "\033[31m[✓] Compiled for Windows:\033[0m $@\n"
 
 $(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
@@ -107,7 +107,7 @@ win64-debug: $(BUILD_DIR)/$(NAME)_win64_debug.exe
 
 $(BUILD_DIR)/$(NAME)_win64_debug.exe: $(OBJS_WIN64_DEBUG)
 	$(CC_WIN64) $(OBJS_WIN64_DEBUG) -o $@ $(LDFLAGS_WIN_DEBUG)
-	@echo -e "\033[31m[✓] Compilated for Windows (debug):\033[0m $@\n"
+	@echo -e "\033[31m[✓] Compiled for Windows (debug):\033[0m $@\n"
 
 $(BUILD_DIR)/win64-debug/%.o: $(SRC_DIR)/%.c | setup
 	$(CC_WIN64) $(CFLAGS_WIN_DEBUG) -c $< -o $@

@@ -21,7 +21,7 @@ typedef struct {
 static void on_load_dialog_finish(GObject *source, GAsyncResult *res, gpointer user_data);
 
 /*
-  function that execute when you press everywere the buttons
+  function that execute when you press any of the buttons
 */
 static void on_subject_clicked(GtkButton *button, gpointer user_data) {
     (void)user_data;
@@ -32,7 +32,7 @@ static void on_subject_clicked(GtkButton *button, gpointer user_data) {
 }
 
 /*
-  this function is a callback that is executad
+  this function is a callback that is executed
   when you press 'Add' button.
 */
 static void on_add_clicked(GtkButton *button, gpointer user_data) {
@@ -123,14 +123,14 @@ static void activate(GtkApplication *app, gpointer user_data) {
     // Load the XML archive
     builder = gtk_builder_new_from_resource("/org/studystudio/interface.ui");
 
-    // extract the windgets using id defined
+    // extract the widgets using id defined
     window = GTK_WIDGET(gtk_builder_get_object(builder,"main_window"));
     add_button = GTK_WIDGET(gtk_builder_get_object(builder,"add_button"));
     load_button =GTK_WIDGET(gtk_builder_get_object(builder,"load_button"));
     target_box = GTK_WIDGET(gtk_builder_get_object(builder,"target_box"));
 
     /*
-      When you make a windows in GTK4 from XML, need asociate by hand
+      When you make a windows in GTK4 from XML, need associate by hand
     */
     gtk_window_set_application(GTK_WINDOW(window), app);
 

@@ -7,7 +7,7 @@
  */
 
 /*
- * this archive have all operaticons needed to create and manipulation of a
+ * this archive have all operations needed to create and manipulation of a
  * subject and create the archive .xz .
  */
 
@@ -28,7 +28,7 @@
 
 typedef struct Subject Subject;
 
-#ifdef _WIN32 //windows flags, structs and machro
+#ifdef _WIN32 //windows flags, structs and macros
     #define _CRT_SECURE_NO_WARNINGS
     #include <windows.h>
     typedef struct WalkContext WalkContext;
@@ -46,18 +46,18 @@ typedef struct Subject Subject;
 #endif
 
 /* 
- * This function that receive each messages form subject.c
- * is necesary to use the footer of GUI to send messages
+ * This function that receive each messages from subject.c
+ * is necessary to use the footer of GUI to send messages
  * of states and errors in the execution.
  *  
- * Is a basical abstraction (abstract class simulation).
+ * Is a basic abstraction (abstract class simulation).
  */
 
 typedef void (*SubjectLogFunc)(const char *msg, void *user_data);
 void subject_set_logger(SubjectLogFunc fn, void *user_data);
 
 
-/* Subjects definitions and atributes of objects */
+/* Subjects definitions and attributes of objects */
 struct Subject {
     int val;
 

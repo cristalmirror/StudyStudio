@@ -7,7 +7,7 @@
  */
 
 /*
- * this archive have all operaticons needed to create and manipulation of a
+ * this archive have all operations needed to create and manipulation of a
  * subject and create the archive .xz .
  */
 #include <lzma.h>
@@ -17,8 +17,8 @@
    #include <limits.h>
    #include <inttypes.h>
     /*
-     * windows.h is used how altenative for windows OS
-     * of sys/wait.h, beacuse is a POSIX standard, and
+     * windows.h is used how alternative for windows OS
+     * of sys/wait.h, because is a POSIX standard, and
      * don't are ported for windows. 
      */
    #include <windows.h>
@@ -102,27 +102,27 @@ void _read_subject(Subject *self) {
  * To me this is more simple to implement the same 
  * function in two Operating System.
  * 
- * Else form is use the TAR comand for windows,
+ * Else form is use the TAR command for windows,
  * but isn't the idea is implement XZ algorithm
- * incide of code.
+ * inside of code.
  * 
  */
 #ifdef _WIN32
 /* Module for windows code
  * 
- * This part of the code contente all code that is necesary 
+ * This part of the code contains all code that is necessary 
  * to the algorithm can run in Windows and maintain the 
  * interface with code rest.
  * 
- * May be in the future this part of the code can be hun in our
+ * May be in the future this part of the code can be split into its own
  * .h and .c, but the moment is better that all are integrated
  * here.
  */
 
 /*
  *     ------------- SO IMPORTANT!!! -------------- 
- * The next functions are part important and necesary to
- * _load_subject run correcty and do the decompress 
+ * The next functions are part important and necessary to
+ * _load_subject run correctly and do the decompress 
  */
 static uint32_t _read_u32_le(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
@@ -224,9 +224,9 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
 }
 
  /*
-  * Make the name of the restul of decompress the folder or archive
+  * Make the name of the result of decompress the folder or archive
   * with the same name of the original archive tar.xz compress
-  * Exemple: "C:\subjects\math.xz" -> dest_dir = "C:\subjects\math"
+  * Example: "C:\subjects\math.xz" -> dest_dir = "C:\subjects\math"
   */
 static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
     char *full = _fullpath(NULL, path, 0);
@@ -365,7 +365,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     *out_buf = acc;
     *out_size = acc_size;
-    /* implementation of Windows dirrectory factory and decompress result. */
+    /* implementation of Windows directory factory and decompress result. */
     char dest_dir[MAX_PATH];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_windows_buffer(self, acc, acc_size, dest_dir) != 0) {
@@ -380,8 +380,8 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
 /*
  *  ------- SO IMPORTANT!!! ------- 
- *  All functions and methods that has whited here
- *  are necesary to _save_subject() runing fine.
+ *  All functions and methods that are written here
+ *  are necessary to _save_subject() running fine.
  *
  */
 
@@ -491,14 +491,14 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
     uint64_t filesize = (uint64_t)pos;
     rewind(f);
 
-    //Buffer I/O LMZA
+    //Buffer I/O LZMA
     uint8_t inbuf[IN_BUF_SIZE];
     uint8_t outbuf[OUT_BUF_SIZE];
     uint8_t length_header[4];
     uint8_t size_header[8];
 
     /*
-     * First is necesary send the bytes of handler without compress
+     * First is necessary send the bytes of handler without compress
      * to the encoder.
      *
      * Header: u32(uint32_t)strlen(relpath) + relpath bytes + u64(filesize)
@@ -517,8 +517,8 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
      * For put the bytes to the compress flow, we use 
      * lzma_code() with LZMA_RUN.
      * 
-     * Implement a little funtion inline to feed bytes
-     *  (repit code header and archive).
+     * Implement a little function inline to feed bytes
+     *  (repeat code header and archive).
      */
     if (self->feed_bytes(strm, outbuf, OUT_BUF_SIZE, outfile,
                     length_header, sizeof(length_header)) != 0 ||
@@ -557,7 +557,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
     char search_path[MAX_PATH];
     WIN32_FIND_DATAA fd;
 
-      /* comprube that parameters aren't NULL*/  
+      /* check that parameters aren't NULL*/  
     if (!self || !base_path || !ctx || !ctx->strm || !ctx->outFile) {
         return -1;
     }
@@ -643,7 +643,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
     DWORD error = GetLastError();
     FindClose(hfind);
 
-    /* Erro system message */
+    /* Error system message */
     if (error != ERROR_NO_MORE_FILES) {
         fprintf(stderr, "FindNextFileA failed: %lu\n", (unsigned long)error);
         subject_log("FindNextFileA failed: %lu\n", (unsigned long)error);
@@ -652,7 +652,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
 
     return 0;
 }
-/* compres and save al archives and information */
+/* compress and save all archives and information */
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
     (void)msg;
 
@@ -682,9 +682,9 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     }
 
     /*
-     * Is equivalece to "tar -C parent basename" of Linux side:
+     * Is equivalent to "tar -C parent basename" of Linux side:
      * waiting *dir in (parent, basename) to the name of the root
-     * directory was writed inside the archive.
+     * directory was written inside the archive.
      */
 
     char *dircopy = _fullpath(NULL, *dir, 0);
@@ -720,8 +720,8 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     ctx.strm = &strm;
 
     if (self->walk_directory(self, parent, base, &ctx) != 0) {
-        fprintf(stderr, "walk_directory faild for %s\n", *dir);
-        subject_log("walk_directory faild for %s\n", *dir);
+        fprintf(stderr, "walk_directory failed for %s\n", *dir);
+        subject_log("walk_directory failed for %s\n", *dir);
         lzma_end(&strm);
         fclose(outf);
         return;
@@ -764,10 +764,10 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         return;
     }
 
-    printf("Maked %s\n", *outpath);
+    printf("Created %s\n", *outpath);
 }
 #else
-/* compres and save al archives and information */
+/* compress and save all archives and information */
 void _save_subject(Subject *self, char **msg, const char **dir, const char **outpath) {
 
     int pipefd[2];
@@ -785,7 +785,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         close(pipefd[1]);
 
         // tar execute
-        //we use "tar -cf - -C <parent> <base>" to that the tar don't include absulete route
+        //we use "tar -cf - -C <parent> <base>" to that the tar don't include absolute route
         char *dircopy = realpath(*dir, NULL);
         if (!dircopy) self->fatal("realpath");
 
@@ -796,7 +796,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
          * ============= CONTEXT =============
          * This code has removed in 0.0.15 because
          * strncpy() isn't secure to ensure the '\0' 
-         * in the end and has chaged for snprintf()
+         * in the end and has changed for snprintf()
          * ====================================
          *if (last_slash == NULL) {
          *   // no slash, use "." like parent
@@ -867,7 +867,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     uint8_t inbuf[IN_BUF_SIZE];
     uint8_t outbuf[OUT_BUF_SIZE];
 
-    /*readin archive to compress*/
+    /*reading archive to compress*/
     ssize_t r;
     bool done_reading = false;
     while (1) {
@@ -961,12 +961,12 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         return;
     }
 
-    printf("Maked %s\n", *outpath);
-    subject_log("Maked %s\n", *outpath);
+    printf("Created %s\n", *outpath);
+    subject_log("Created %s\n", *outpath);
 }
 
 /*
-  * Make the name of the restul of decompress the folder or archive
+  * Make the name of the result of decompress the folder or archive
   * with the same name of the original archive tar.xz compress
   */
 static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
@@ -989,7 +989,7 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
     return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
 }
 
-/* unpackgin decompress archive in memory */
+/* unpacking decompress archive in memory */
 static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, const char *dest_dir) {
     if (mkdir(dest_dir, 0755) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir(%s) failed: %s\n", dest_dir, strerror(errno));
@@ -1041,7 +1041,7 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
 /* This function load subject:
  *
  * This function decompress the .xz archive
- * and load al archives (.doc .pdf .txt .html, etc).
+ * and load all archives (.doc .pdf .txt .html, etc).
  *
  * `path` is the .xz archive.
  * `out_buf` pointer buffer with the data decompress
@@ -1083,7 +1083,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     /*
      * YES, this form of define is a shit, but is more easy
-     * to write, pleace don't mistake with `**out_buf`
+     * to write, please don't mistake with `**out_buf`
      */
     uint8_t *inbuf = malloc(IN_CHUNK);
     uint8_t *outbuf = malloc(OUT_CHUNK);
@@ -1097,7 +1097,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
         return -4;
     }
 
-    /* Dinamic Buffer accumulators */
+    /* Dynamic Buffer accumulators */
     uint8_t *acc = LZMA_RUN;
     size_t acc_size = 0;
     size_t acc_cap = 0;
@@ -1143,7 +1143,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
         
         size_t produced = OUT_CHUNK - strm.avail_out;
         if (produced > 0) {
-            /* resize and realalocation if is necesary
+            /* resize and reallocation if is necessary
              * more capacity to accumulator (acc).
              */
             if (acc_size + produced > acc_cap) {
@@ -1173,7 +1173,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     } while (1);
 
-    /* free mememory resources of decoder */
+    /* free memory resources of decoder */
     lzma_end(&strm);
     free(inbuf);
     free(outbuf);
@@ -1198,13 +1198,13 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             return -7;
         }
         subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
-        return -8; // error lzma unknow
+        return -8; // error lzma unknown
     }
 
     *out_buf = acc;
     *out_size = acc_size;
 
-    /* implementation of GNU/Linux dirrectory factory and decompress result. */
+    /* implementation of GNU/Linux directory factory and decompress result. */
     char dest_dir[PATH_MAX];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_tar_buffer(self, acc, acc_size, dest_dir) != 0) {
@@ -1220,11 +1220,11 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 #endif
 
 /*
- * Implementation of the interface to the abstradtion
+ * Implementation of the interface to the abstraction
  * SubjectLogFunc. 
  * 
- * Realy i know that is so confuse using
- * this method, but I think that this bullshit is necesary
+ * Really I know that it is so confusing using
+ * this method, but I think that this bullshit is necessary
  * to not break SOLID arch.
  */
 

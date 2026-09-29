@@ -385,11 +385,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.7] - 2026-08-27
 
 ## Added
-- The in `subject.c` and `subject.h` the funtion `load_subject()`
+- The in `subject.c` and `subject.h` the function `load_subject()`
 ## [0.0.6] - 2026-08-27
 
 ### Changed 
-- `include/subject.h` and `src/subject.c` can compres in lmza/xz now
+- `include/subject.h` and `src/subject.c` can compress in lzma/xz now
 - `xz-devel` library has add in the dockerfile
 
 ## [0.0.5] - 2026-08-15
@@ -398,7 +398,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `include/subject.h` and `src/subject.c` has created to manager the subject archive
 
 ### Changed 
-- Makefike has modify to can compile `include/subject.h` and `src/subject.c` 
+- Makefile has modify to can compile `include/subject.h` and `src/subject.c` 
 
 
 ---
