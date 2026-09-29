@@ -1,6 +1,6 @@
 # `include/subject.h`
 
-Status: draft for user approval; version 0.0.14.
+Status: draft for user approval; version 0.0.15.
 
 ## Purpose
 
@@ -46,7 +46,6 @@ void subject_set_logger(SubjectLogFunc fn, void *user_data);
 | `val` | Integer initialized from the constructor argument; no domain meaning is established yet. |
 | `proc_handle` (Windows) / `pid` (elsewhere) | Child-process identifier. As of this version these are two distinct struct fields selected by `#ifdef _WIN32`, not a single field holding either a `HANDLE` or a `pid_t`: `proc_handle` is a Win32 `HANDLE`, `pid` is a POSIX `pid_t`. |
 | `is_dot_or_dotdot(self, name)` (Windows only) | Returns non-zero when `name` is `.` or `..`, to be skipped while walking a directory. |
-| `write_u32_le(self, f, v)` (Windows only) | Writes a `uint32_t` to `f` in little-endian order. Currently assigned but not called from anywhere in `_save_subject`'s write path, which instead packs headers by hand before handing them to `feed_bytes`. |
 | `feed_bytes(strm, outbuf, out_buf_size, outfile, data, len)` (Windows only) | Pushes `data` through the active LZMA encoder with `LZMA_RUN` and writes any produced compressed bytes to `outfile`. Does not finish the stream. |
 | `walk_directory(self, base_path, rel_prefix, ctx)` (Windows only) | Recursively enumerates `base_path` with `FindFirstFileA`/`FindNextFileA` and writes each regular file's entry through `feed_bytes`. |
 | `fatal(msg)` | Default implementation prints an error and terminates the process. |

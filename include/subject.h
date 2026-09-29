@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.0.14
+ * Version: 0.0.15
  * License: GPLv3
- * Last edited: 2026-09-24
+ * Last edited: 2026-09-29
  */
 
 /*
@@ -64,7 +64,6 @@ struct Subject {
     #ifdef _WIN32
         HANDLE proc_handle;
         int (*is_dot_or_dotdot)(Subject *self, const char *name);
-        int (*write_u32_le)(Subject *self, FILE *f, uint32_t v);
         int (*feed_bytes)(lzma_stream *strm, uint8_t *outbuf, size_t out_buf_size, FILE *outfile, const uint8_t *data, size_t len);
         int (*walk_directory)(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx);
 

@@ -1,6 +1,6 @@
 # `src/subject.c`
 
-Status: draft for user approval; version 0.0.14.
+Status: draft for user approval; version 0.0.15.
 
 ## Purpose and dependencies
 
@@ -16,12 +16,13 @@ above the existing purpose comment.
 
 `new_subject` allocates the object, initializes `val` and the platform process
 field (`proc_handle` on Windows, `pid` elsewhere), and assigns all operation
-pointers, including the Windows-only `is_dot_or_dotdot`, `write_u32_le`,
-`feed_bytes`, and `walk_directory` methods. `_close_subject` frees the object
+pointers, including the Windows-only `is_dot_or_dotdot`, `feed_bytes`, and
+`walk_directory` methods. `_close_subject` frees the object
 only. `_read_subject` prints its integer value to `stdout` and also reports it
 through `subject_log`. `_fatal` calls `perror` and `exit(EXIT_FAILURE)`.
-`write_u32_le` (and the private `_write_u64_le`) are currently unused:
-`_write_file_entry_to_lzma` builds the length and size headers inline.
+`_write_file_entry_to_lzma` builds the little-endian length and size headers
+inline and passes them through `feed_bytes`, so they are compressed together
+with the file content.
 
 ## Logging
 
@@ -96,7 +97,7 @@ either, matching the Linux side.
 
 ## Loading
 
-`_load_subject(self, path, out_buf, out_size)` reads an XZ file, decodes it with concatenated streams enabled, and accumulates decompressed bytes in a dynamically allocated buffer, same as before. On Linux, `self` is used now: after decoding, it derives an extraction directory next to the archive (`_derive_extract_dir`) and feeds the decoded TAR bytes to `tar -xf -` through a pipe (`_unpack_tar_buffer`), writing real files to disk as a side effect before returning. `out_buf`/`out_size` still carry the full decoded buffer, unchanged; the extraction is additional, not a replacement for it. `main.c` was not modified, so this side effect now happens automatically the next time `on_load_dialog_respose` calls `load_subject` on Linux (see [main.c](main.c.md)).
+`_load_subject(self, path, out_buf, out_size)` reads an XZ file, decodes it with concatenated streams enabled, and accumulates decompressed bytes in a dynamically allocated buffer, same as before. On Linux, `self` is used now: after decoding, it derives an extraction directory next to the archive (`_derive_extract_dir`) and feeds the decoded TAR bytes to `tar -xf -` through a pipe (`_unpack_tar_buffer`), writing real files to disk as a side effect before returning. `out_buf`/`out_size` still carry the full decoded buffer, unchanged; the extraction is additional, not a replacement for it. `main.c` was not modified, so this side effect now happens automatically the next time `on_load_dialog_finish` calls `load_subject` on Linux (see [main.c](main.c.md)).
 
 As of version 0.0.8, Windows has its own native `_load_subject`, functionally
 equivalent to the Linux one for decoding: it decompresses the full `.xz` file into a single

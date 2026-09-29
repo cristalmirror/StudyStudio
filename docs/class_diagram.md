@@ -1,6 +1,6 @@
 # Class diagram
 
-Status: draft for user approval; version 0.0.14.
+Status: draft for user approval; version 0.0.15.
 
 > [!WARNING]
 > **The `Edit` class and its subclasses (`EditPDF`, `EditUML`, `EditCode`,
@@ -23,7 +23,7 @@ classDiagram
         -on_subject_clicked(GtkButton* button, gpointer user_data)$ void
         -on_add_clicked(GtkButton* button, gpointer user_data)$ void
         -on_load_clicked(GtkButton* button, gpointer user_data)$ void
-        -on_load_dialog_respose(GtkNativeDialog* dialog, int response, gpointer user_data)$ void
+        -on_load_dialog_finish(GObject* source, GAsyncResult* res, gpointer user_data)$ void
         -on_subject_log(const char* msg, void* user_data)$ void
         -activate(GtkApplication* app, gpointer user_data)$ void
         +main(int argc, char* argv[])$ int
@@ -62,7 +62,6 @@ classDiagram
         +save_subject(char** msg, const char** dir, const char** outpath) void
         +close_subject() void
         +is_dot_or_dotdot(const char* name) int [Win32]
-        +write_u32_le(FILE* f, uint32_t v) int [Win32]
         +feed_bytes(lzma_stream* strm, uint8_t* outbuf, size_t out_buf_size, FILE* outfile, const uint8_t* data, size_t len) int [Win32]
         +walk_directory(const char* base_path, const char* rel_prefix, WalkContext* ctx) int [Win32]
     }
@@ -153,7 +152,7 @@ classDiagram
 | From | To | Meaning |
 | --- | --- | --- |
 | `MainGUI` | `AppState` | `activate()` allocates the state and passes it as `user_data` to the callbacks. |
-| `MainGUI` | `Subject` | `on_load_dialog_respose()` creates a `Subject` and calls `load_subject()`. |
+| `MainGUI` | `Subject` | `on_load_dialog_finish()` creates a `Subject` and calls `load_subject()`. |
 | `MainGUI` | `SubjectLogFunc` | `on_subject_log()` is the concrete implementation that writes to the footer label. |
 | `SubjectLogger` | `SubjectLogFunc` | Stores the registered callback in `g_log_fn` via `subject_set_logger()`. |
 | `Subject` | `SubjectLogger` | Reports status and errors through `subject_log()`. |
