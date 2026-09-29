@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.0.14
+ * Version: 0.0.15
  * License: GPLv3
- * Last edited: 2026-09-24
+ * Last edited: 2026-09-29
  */
 
 /*
@@ -384,23 +384,6 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
  *  are necesary to _save_subject() runing fine.
  *
  */
-
-/* Write integer values in the archive's little-endian format. */
-static int _write_u32_le(Subject *self,FILE *f, uint32_t v) {
-    uint8_t b[4];
-    b[0] = v & 0xFF;
-    b[1] = (v >> 8) & 0xFF;
-    b[2] = (v >> 16) & 0xFF;
-    b[3] = (v >> 24) & 0xFF;
-    return fwrite(b, 1, sizeof(b), f) == sizeof(b) ? 0 : -1;
-}
-
-static int _write_u64_le(FILE *f, uint64_t v) {
-    uint8_t b[8];
-
-    for (int i = 0; i < 8; i++) b[i] = (v >> (8 * i)) & 0xFF;
-    return fwrite(b, 1, sizeof(b), f) == sizeof(b) ? 0 : -1;
-}
 
 /*
  * Make route to connect base + "\" + name int UTF-8 simple 
@@ -809,21 +792,43 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         char *last_slash = strrchr(dircopy, '/');
         char parent[PATH_MAX];
         char base[PATH_MAX];
+        /*
+         * ============= CONTEXT =============
+         * This code has removed in 0.0.15 because
+         * strncpy() isn't secure to ensure the '\0' 
+         * in the end and has chaged for snprintf()
+         * ====================================
+         *if (last_slash == NULL) {
+         *   // no slash, use "." like parent
+         *   strcpy(parent, ".");
+         *   strncpy(base,dircopy,PATH_MAX);
+         *} else if (last_slash == dircopy) {
+         *   //path starts with "/" and is like "/foo"
+         *   strncpy(parent, "/", PATH_MAX);
+         *   strncpy(parent, last_slash + 1, PATH_MAX);
+         *} else {
+         *
+         *   size_t p_len = last_slash - dircopy;
+         *   if (p_len >= PATH_MAX) p_len = PATH_MAX - 1;
+         *   strncpy(parent, dircopy, p_len);
+         *   parent[p_len] = '\0';
+         *   strncpy(base, last_slash + 1, PATH_MAX);
+         *}
+         */
         if (last_slash == NULL) {
             // no slash, use "." like parent
-            strcpy(parent, ".");
-            strncpy(base,dircopy,PATH_MAX);
+            snprintf(parent, sizeof(parent), ".");
+            snprintf(base, sizeof(base), "%s", dircopy);
         } else if (last_slash == dircopy) {
             //path starts with "/" and is like "/foo"
-            strncpy(parent, "/", PATH_MAX);
-            strncpy(parent, last_slash + 1, PATH_MAX);
+            snprintf(parent, sizeof(parent), "/");
+            snprintf(base, sizeof(base), "%s", last_slash + 1);
         } else {
-
             size_t p_len = last_slash - dircopy;
             if (p_len >= PATH_MAX) p_len = PATH_MAX - 1;
-            strncpy(parent, dircopy, p_len);
+            memcpy(parent, dircopy, p_len);
             parent[p_len] = '\0';
-            strncpy(base, last_slash + 1, PATH_MAX);
+            snprintf(base, sizeof(base), "%s", last_slash + 1);
         }
         free(dircopy);
         execlp("tar", "tar", "-cf", "-", "-C", parent, base, (char *)NULL);
@@ -1282,7 +1287,6 @@ Subject *new_subject(int value) {
     #ifdef _WIN32
         new->proc_handle = NULL;
         new->is_dot_or_dotdot = _is_dot_or_dotdot;
-        new->write_u32_le = _write_u32_le;
         new->feed_bytes = _feed_bytes;
         new->walk_directory = _walk_directory;
     #else
