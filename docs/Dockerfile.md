@@ -1,6 +1,6 @@
 # `Dockerfile`
 
-Status: draft for user approval; version 0.0.14.
+Status: draft for user approval; version 0.0.15.
 
 ## Purpose and configuration
 
