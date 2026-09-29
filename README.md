@@ -83,7 +83,7 @@ docker run --rm \
     mi_app_builder \
     make debug
 ```
-# Windows
+### Windows
 
 ```
 docker run --rm \
