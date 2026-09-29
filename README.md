@@ -42,7 +42,7 @@ The project showcases:
 ```
 cd ~/StudyStudio
 
-docker build -t mi_app_builder .
+docker build -t studystudio-builder .
 
 mkdir -p build
 
@@ -70,7 +70,7 @@ docker run --rm \
 The Makefile has a `debug` target that compiles an unoptimized build with debug symbols (`-g -O0`), placed in `build/linux-debug/` so it never mixes with the release object files in `build/linux/`.
 
 Build it the same way as the release binaries, inside the Docker toolchain (the host lacks `gtk4-devel`/`libarchive-devel`, so plain `make` only works in the container):
-
+### GNU/Linux 
 ```
 docker run --rm \
     --user "$(id -u):$(id -g)" \
@@ -83,7 +83,20 @@ docker run --rm \
     mi_app_builder \
     make debug
 ```
+# Windows
 
+```
+docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$(pwd)/src:/usr/src/app/src" \
+            -v "$(pwd)/include:/usr/src/app/include" \
+            -v "$(pwd)/build:/usr/src/app/build" \
+            -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
+            -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
+            -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
+            studystudio-builder \
+            make win64-debug
+```
 Once the debug binary exists, run GDB directly on the host, the same way you already run the release binary:
 
 ```
@@ -106,7 +119,7 @@ make gdb
 A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.0.x_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
 
 ## 📂 Project Structure
-```
+```sh
 StudyStudio/
 ├── src/
 │ ├── main.c # Application entry point and callbacks
@@ -120,7 +133,7 @@ StudyStudio/
 │ └ subject.h #definitions subject manager
 ├── interface.ui # GTK4 UI definition (XML)
 ├── resources.xml
-├── docker build -t mi_app_builder .
+├── CLAUDE.md #claud code context added
 ├── Makefile # Build rules for both platforms
 ├── Dockerfile # Fedora 40 build environment
 ├── CHANGELOG.md # Version history
