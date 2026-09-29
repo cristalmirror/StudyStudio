@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.0.14
+ * Version: 0.0.15
  * License: GPLv3
- * Last edited: 2026-09-24
+ * Last edited: 2026-09-29
  */
 
 #include <gtk/gtk.h>
@@ -18,7 +18,7 @@ typedef struct {
 
 
 /* Declarations: */
-static void on_load_dialog_respose(GtkNativeDialog *dialog, int response, gpointer user_data);
+static void on_load_dialog_finish(GObject *source, GAsyncResult *res, gpointer user_data);
 
 /*
   function that execute when you press everywere the buttons
@@ -57,46 +57,53 @@ static void on_load_clicked(GtkButton *button, gpointer user_data) {
     (void)button;
     AppState *state = (AppState *)user_data;
 
-    GtkFileChooserNative *dialog = gtk_file_chooser_native_new(
-        "Cargar Materia",
-        GTK_WINDOW(state->window),
-        GTK_FILE_CHOOSER_ACTION_OPEN,
-        "_Abrir", "_Cancelar"
-    );
-
-    g_signal_connect(dialog,"response",G_CALLBACK(on_load_dialog_respose), state);
-    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
+    /*
+     * GtkFileDialog is asynchronous: gtk_file_dialog_open() returns at once
+     * and GTK calls on_load_dialog_finish() when the user picks or cancels.
+     * The pending operation keeps its own reference to the dialog, so we
+     * can release ours right away.
+     */
+    GtkFileDialog *dialog = gtk_file_dialog_new();
+    gtk_file_dialog_set_title(dialog, "Cargar Materia");
+    gtk_file_dialog_open(dialog, GTK_WINDOW(state->window), NULL,
+                         on_load_dialog_finish, state);
+    g_object_unref(dialog);
 }
 
 /*load the file or folder, in a subject instance */
-static void on_load_dialog_respose(GtkNativeDialog *dialog, int respose, gpointer user_data) {
+static void on_load_dialog_finish(GObject *source, GAsyncResult *res, gpointer user_data) {
     AppState *state = (AppState *)user_data;
+    GError *error = NULL;
+
+    GFile *file = gtk_file_dialog_open_finish(GTK_FILE_DIALOG(source), res, &error);
+    if (file == NULL) {
+        /* the user closing the dialog is not an error worth reporting */
+        if (!g_error_matches(error, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED)) {
+            g_print("Error al abrir el archivo: %s\n", error->message);
+        }
+        g_clear_error(&error);
+        return;
+    }
 
     /* file manipulations */
-    if (respose == GTK_RESPONSE_ACCEPT) {
-        GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
-        char *path = g_file_get_path(file);
-    
+    char *path = g_file_get_path(file);
 
-        Subject *mat = new_subject(state->counter);
-        if (mat != NULL) {
-            uint8_t *buf = NULL;
-            size_t size = 0;
-            int rc = mat->load_subject(mat,path,&buf,&size);
+    Subject *mat = new_subject(state->counter);
+    if (mat != NULL) {
+        uint8_t *buf = NULL;
+        size_t size = 0;
+        int rc = mat->load_subject(mat,path,&buf,&size);
 
-            if (rc == 0) {
-                g_print("Cargados %zu bytes desde %s",size,path);
-                free(buf); 
-            } else {
-                g_print("Error al cargar (%d): %s\n",rc,path);
-            }
-            mat->close_subject(mat);
-    
+        if (rc == 0) {
+            g_print("Cargados %zu bytes desde %s\n",size,path);
+            free(buf);
+        } else {
+            g_print("Error al cargar (%d): %s\n",rc,path);
         }
-        g_free(path);
-        g_object_unref(file);
+        mat->close_subject(mat);
     }
-    g_object_unref(dialog);
+    g_free(path);
+    g_object_unref(file);
 }
 /* callback that subject.c calls with each message */
 static void on_subject_log(const char *msg, void *user_data) {
@@ -128,7 +135,8 @@ static void activate(GtkApplication *app, gpointer user_data) {
     gtk_window_set_application(GTK_WINDOW(window), app);
 
     // to train the state and connect the signals
-    AppState *state = g_malloc(sizeof(AppState));
+    AppState *state = g_new0(AppState, 1);   /* zeroed: no garbage fields */
+    state->window = window;
     state->destiny_content = target_box;
     state->counter = 0;
     g_signal_connect(add_button, "clicked",G_CALLBACK(on_add_clicked), state);

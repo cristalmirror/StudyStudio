@@ -22,8 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   format.
 - The Windows entry format records only regular files, so empty directories
   cannot be restored.
-- `src/main.c`: `AppState.window` is never assigned, but `on_load_clicked`
-  passes it as the parent window of the file chooser.
 - `src/subject.c`: in `_unpack_windows_buffer`, the `subject_log` calls for
   the truncated size header/content errors come after `return -1` and are
   never reached.
@@ -40,6 +38,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.0.15] - 2026-09-29
+
+### Changed
+- `src/main.c`: the "Load Subject" file picker now uses `GtkFileDialog`
+  (`gtk_file_dialog_open` / `gtk_file_dialog_open_finish`) instead of the
+  deprecated `GtkFileChooserNative` and `gtk_file_chooser_get_file`, which
+  removes the `-Wdeprecated-declarations` warnings. The
+  `on_load_dialog_respose` callback was replaced by `on_load_dialog_finish`;
+  closing the dialog (`GTK_DIALOG_ERROR_DISMISSED`) is ignored and any other
+  error is printed (see `docs/main.c.md`).
+- `src/subject.c`: the Linux `_save_subject` builds `parent` and `base` with
+  `snprintf` (and `memcpy` for the fixed-length parent prefix) instead of
+  `strcpy`/`strncpy`, so both strings are always NUL-terminated. This removes
+  the `-Wstringop-truncation` warnings.
+- `Makefile`: build and clean messages translated to English.
+- Bumped the project version to `0.0.15`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version`/`Last edited` fields of the file headers in
+  `src/main.c`, `src/subject.c`, and `include/subject.h`, the
+  "Status"/baseline version lines and `studystudio-0.0.x` mentions across
+  `docs/*.md`, and the commit example in `CLAUDE.md`.
+- `docs/main.c.md`, `docs/subject.c.md`, `docs/subject.h.md`,
+  `docs/class_diagram.md`: updated for `on_load_dialog_finish`, the
+  `AppState` allocation, and the removed `write_u32_le` method.
+
+### Removed
+- `src/subject.c`, `include/subject.h`: the unused Windows helpers
+  `_write_u32_le` and `_write_u64_le`, and the `write_u32_le` method of
+  `Subject`. They wrote directly to a `FILE *`, so using them inside
+  `walk_directory` would have bypassed the LZMA encoder and corrupted the
+  archive; the entry headers are built inline and sent through `feed_bytes`.
+
+### Fixed
+- `src/subject.c`: in the Linux `_save_subject`, for a directory directly
+  under `/` (for example `/foo`) the basename was copied into `parent`
+  instead of `base`, leaving `base` uninitialized and passing garbage to
+  `tar -C <parent> <base>`.
+- `src/main.c`: `AppState.window` was never assigned (and `g_malloc` left it
+  as garbage), but it was passed as the parent of the file picker. `activate`
+  now allocates `AppState` with `g_new0` and sets `state->window = window`.
+- `src/main.c`: the success message `Cargados %zu bytes desde %s` now ends
+  with a newline.
+
+### Added
+- `.gitignore`: ignore the `.ccls-cache/` directory created by the ccls
+  language server.
 
 ## [0.0.14] - 2026-09-24
 

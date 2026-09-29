@@ -126,3 +126,5 @@ TAGS
 
 # Valgrind
 vgcore.*
+# ccls language server cache
+.ccls-cache/

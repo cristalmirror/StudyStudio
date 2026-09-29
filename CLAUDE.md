@@ -65,7 +65,7 @@ root y luego falla con `Permission denied`: usar `--user` o hacer
 - Preferir llamadas estilo método (`self->fn(self, ...)`) sobre funciones
   estáticas sueltas en `Subject`.
 - Commits: Conventional Commits con versión, p. ej.
-  `feat (0.0.14): ...`, `fix (0.0.14): ...`, `docs (0.0.14): ...`.
+  `feat (0.0.15): ...`, `fix (0.0.15): ...`, `docs (0.0.15): ...`.
 - Al cambiar de versión: actualizar `Makefile` (`NAME`), cabeceras, `README.md`
   y `CHANGELOG.md`.
 - Antes de retomar trabajo, leer `CHANGELOG.md` (`[Unreleased]` → Known Issues)
