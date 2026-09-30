@@ -1273,7 +1273,14 @@ static void subject_log(const char *fmt, ...) {
 
     if (buf != stack_buf) free(buf);
 }
+/* 
+ * make the container of all resources necesary to create 
+ * a subject (folders, tools, edits, etc).
+ */
+void _make_subject(Subject *self) {
 
+
+}
 
 /*destructor*/
 void _close_subject(Subject *self) {
