@@ -24,6 +24,12 @@ through `subject_log`. `_fatal` calls `perror` and `exit(EXIT_FAILURE)`.
 inline and passes them through `feed_bytes`, so they are compressed together
 with the file content.
 
+`_make_subject(self)` is a placeholder added in 0.0.15 and has no
+implementation yet. It is intended to build the container of resources a
+subject needs (folders, tools, edits, etc.). It is not declared in
+`subject.h`, is not assigned to any operation pointer in `new_subject`, and
+is not called anywhere, so it currently has no effect.
+
 ## Logging
 
 As of version 0.0.14, `subject_set_logger` stores a process-wide `SubjectLogFunc` and its `user_data` (see [subject.h](subject.h.md#logging)). The private `subject_log(fmt, ...)` formats with `vsnprintf` into a 1024-byte stack buffer, retrying with a heap buffer of the exact size when the message is longer (on allocation failure it reports `[log truncated: OOM]`). The result goes to the registered callback, or to `stderr` when none is registered. `subject_log` is forward-declared right after the includes so it can be used by both platform branches before its definition near the end of the file.

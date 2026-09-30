@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `src/subject.c`: `_make_subject(self)` stub, intended to create the
+  resources a subject needs (folders, tools, edits). Not implemented yet.
+
 ### Known Issues
+- `src/subject.c`: `_make_subject` is empty, has no prototype in
+  `subject.h`, and is not wired into `struct Subject`/`new_subject`.
 - Windows's `load_subject` extraction path (`_derive_extract_dir` +
   `_unpack_windows_buffer`) now compiles, but it has not been tested at
   runtime on Windows yet (see `docs/subject.c.md#extraction`).
