@@ -989,7 +989,14 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
     return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
 }
 
-/* unpacking decompress archive in memory */
+/* 
+ * unpacking decompress archive in memory:
+ *
+ * the buffer have the total of bytes of
+ * folder and LZMA decompress these buffer,
+ * finaly _unpack_tar_buffer() remake the 
+ * folder using tar comand.
+ */
 static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, const char *dest_dir) {
     if (mkdir(dest_dir, 0755) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir(%s) failed: %s\n", dest_dir, strerror(errno));
