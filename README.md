@@ -54,7 +54,7 @@ docker run --rm \
     -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
     -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
     -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
-    mi_app_builder \
+    studystudio-builder \
     make all
       
 # to run LINUX
