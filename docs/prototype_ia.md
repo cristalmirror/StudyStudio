@@ -526,3 +526,378 @@ The first build of the footer code failed in `src/subject.c`:
 - [ ] Move the unreachable `subject_log` calls after `return -1` in `_unpack_windows_buffer` before the `return`.
 - [ ] Linux `_save_subject`: the `"/foo"` branch copies into `parent` instead of `base`; replace the `strncpy` calls with `snprintf`.
 - [ ] Decide between `GtkLabel` (last message) and `GtkTextView` (history) for the footer.
+
+---
+
+### cristalmirror IA secion ### [2026-10-06] — next 0.1.0
+
+Log of an AI-assisted session on StudyStudio. Covers the review of the untracked `include/edit.h` / `include/edit_subclass/` headers and the design of the `Edit` hierarchy (editing tools) targeted for **version 0.1.0**. The code below was **designed by the AI and is pending manual implementation** by the user. It was compiled in an isolated copy of the project (`make linux win64` inside `mi_app_builder`): both targets built with no new warnings. It has **not** been tested at runtime yet.
+
+---
+
+## 1. Review of the current state
+
+| File | Problem |
+| --- | --- |
+| `include/edit.h` | No include guard, and missing `<stdbool.h>` (`bool`) and `<gtk/gtk.h>` (`GtkWidget`), so it does not compile once included. No standard file header. `EditPDF` is declared here instead of in `editPDF.h`. |
+| `include/edit.h` (design) | **No virtual destructor:** `close` is common, but every subclass owns resources (a `GtkTextBuffer`, a PDF document...) that the base cannot know about. There is also no field for the widget created by `render`, so `close` cannot remove it from the UI. |
+| `editDOC.h` | `#include <edit.h>` works thanks to `-Iinclude`, but the project uses relative paths (`"../include/subject.h"`). Missing guard, header, constructor prototype and trailing newline. |
+| `editPDF.h`, `editUML.h` | Empty. |
+| `Makefile` | `SRCS := $(wildcard $(SRC_DIR)/*.c)` is not recursive, so `src/edit_subclass/*.c` would never be compiled. `HEADERS := $(wildcard $(INCLUDE_DIR)/.h)` is wrong (missing `*`) and unused: changing a `.h` does not rebuild the `.o` files. |
+| `docs/class_diagram.md` | Names `EditCode` / `EditDocs`, while the files are `editDOC` / `editPDF` / `editUML`; to be aligned once the names are settled. |
+
+> [!WARNING]
+> Because header changes do not trigger a rebuild, changing the layout of `struct Edit` can leave a stale `editDOC.o` using the old layout and silently corrupt memory. Until the dependency tracking is fixed (e.g. `-MMD -MP`), run **`make clean` after every `.h` change**.
+
+## 2. Design: inheritance in C
+
+Same pattern as `Subject`, plus inheritance:
+
+```
+EditDOC in memory:
+┌───────────────────────────┐  <- (EditDOC *)doc == (Edit *)doc  (same address)
+│ Edit base                 │     path, modified, widget, open, save, render...
+├───────────────────────────┤
+│ GtkTextBuffer *buffer     │  <- subclass-specific fields
+│ gulong modified_id        │
+└───────────────────────────┘
+```
+
+- **Upcast** (`EditDOC*` → `Edit*`): always safe. The C standard guarantees that a pointer to a struct also points to its first member, so `base` **must** be the first field.
+- **Downcast** (`Edit*` → `EditDOC*`): only safe inside `EditDOC`'s own methods, because they are only assigned to real `EditDOC` objects.
+- **Abstract methods:** `edit_init` leaves them `NULL` and each subclass constructor assigns them. Calling a `NULL` method crashes, which is the desired outcome if a subclass forgot to implement it.
+- **Virtual destructor:** the common `close` calls the subclass's `self->finalize(self)`, then frees `path` and calls `free(self)`. That frees the **whole** `EditDOC`, because `self` points to the start of the block allocated with `calloc(sizeof(EditDOC))`.
+
+## 3. `include/edit.h`
+
+```c
+/**
+ * Developer: cristalmirror
+ * Repository: https://github.com/cristalmirror/StudyStudio
+ * Version: 0.1.0
+ * License: GPLv3
+ * Last edited: 2026-10-06
+ */
+
+/*
+ * Abstract base "class" for every editor of StudyStudio.
+ * Each subclass embeds Edit as its FIRST member, calls edit_init()
+ * and assigns its own open/save/render/finalize.
+ */
+
+#ifndef EDIT_H
+#define EDIT_H
+
+#include <stdbool.h>
+#include <gtk/gtk.h>
+
+typedef struct Edit Edit;
+
+struct Edit {
+    char *path;          /* owned copy of the file path (NULL until open) */
+    bool modified;       /* true while there are unsaved changes */
+    GtkWidget *widget;   /* root widget created by render (NULL until then) */
+
+    /* abstract: assigned by each subclass */
+    int  (*open)(Edit *self, const char *path);
+    int  (*save)(Edit *self);
+    void (*render)(Edit *self, GtkWidget *container);
+    void (*finalize)(Edit *self);   /* frees subclass fields, may be NULL */
+
+    /* common: implemented once in edit.c */
+    void (*close)(Edit *self);
+    bool (*is_modified)(Edit *self);
+    void (*mark_modified)(Edit *self, bool modified);
+    void (*set_path)(Edit *self, const char *path);
+};
+
+/* protected: only subclass constructors call it */
+void edit_init(Edit *self);
+
+/* factory: picks the subclass from the file extension and opens the file */
+Edit *new_edit_for_path(const char *path);
+
+#endif
+```
+
+## 4. `src/edit.c`
+
+```c
+/**
+ * (standard header, same as edit.h)
+ */
+
+/*
+ * Common operations of the Edit hierarchy and the factory that
+ * chooses the right editor for a file.
+ */
+#include <stdlib.h>
+#include <string.h>
+#include "../include/edit.h"
+#include "../include/edit_subclass/editDOC.h"
+
+/* destructor: shared by every subclass */
+static void _edit_close(Edit *self) {
+    if (self == NULL) return;
+
+    /* 1. take the widget out of the UI first, so no signal can reach us later */
+    if (self->widget != NULL) {
+        GtkWidget *parent = gtk_widget_get_parent(self->widget);
+        if (parent != NULL && GTK_IS_BOX(parent)) {
+            gtk_box_remove(GTK_BOX(parent), self->widget);
+        }
+        self->widget = NULL;
+    }
+    /* 2. let the subclass free its own fields (virtual destructor) */
+    if (self->finalize != NULL) {
+        self->finalize(self);
+    }
+    /* 3. free the base fields and the whole object */
+    g_free(self->path);
+    free(self);
+}
+
+static bool _edit_is_modified(Edit *self) {
+    return self->modified;
+}
+
+static void _edit_mark_modified(Edit *self, bool modified) {
+    self->modified = modified;
+}
+
+static void _edit_set_path(Edit *self, const char *path) {
+    char *copy = g_strdup(path);   /* copy first: path may be self->path */
+    g_free(self->path);
+    self->path = copy;
+}
+
+void edit_init(Edit *self) {
+    self->path = NULL;
+    self->modified = false;
+    self->widget = NULL;
+
+    /* abstract: NULL until the subclass assigns them */
+    self->open = NULL;
+    self->save = NULL;
+    self->render = NULL;
+    self->finalize = NULL;
+
+    /* common */
+    self->close = _edit_close;
+    self->is_modified = _edit_is_modified;
+    self->mark_modified = _edit_mark_modified;
+    self->set_path = _edit_set_path;
+}
+
+Edit *new_edit_for_path(const char *path) {
+    const char *ext = strrchr(path, '.');
+    Edit *edit = NULL;
+
+    if (ext == NULL) return NULL;
+
+    if (g_ascii_strcasecmp(ext, ".txt") == 0 ||
+        g_ascii_strcasecmp(ext, ".md") == 0) {
+        edit = new_edit_doc();
+    }
+    /* else if (... ".pdf") edit = new_edit_pdf(); */
+
+    if (edit == NULL) return NULL;
+
+    if (edit->open(edit, path) != 0) {
+        edit->close(edit);
+        return NULL;
+    }
+    return edit;
+}
+```
+
+Notes:
+
+- **`_edit_` / `_doc_` prefixes:** identifiers starting with `_` at file scope are reserved for the implementation in C, and MinGW already declares `_open` / `_close` in `<io.h>`. The prefix avoids cross-platform clashes.
+- **`g_strdup` / `g_free` for `path`:** GLib is already linked, it is portable, and `g_strdup(NULL)` returns `NULL`. Rule: what is allocated with `g_*` is freed with `g_free`; what is allocated with `malloc` / `calloc` is freed with `free`.
+- **Order in `close`:** widget first, then `finalize`. The other way round, a GTK signal could reach an already-freed `self`.
+
+## 5. `include/edit_subclass/editDOC.h`
+
+```c
+/**
+ * (standard header)
+ */
+
+/* Plain-text document editor (.txt, .md) based on GtkTextView. */
+
+#ifndef EDIT_DOC_H
+#define EDIT_DOC_H
+
+#include "../edit.h"
+
+typedef struct {
+    Edit base;               /* must be the first member */
+    GtkTextBuffer *buffer;   /* document text, we own one reference */
+    gulong modified_id;      /* "modified-changed" handler id */
+} EditDOC;
+
+Edit *new_edit_doc(void);
+
+#endif
+```
+
+The constructor returns `Edit *`, not `EditDOC *`, on purpose: the rest of the application should only know the `Edit` interface.
+
+## 6. `src/edit_subclass/editDOC.c`
+
+```c
+/**
+ * (standard header)
+ */
+
+/*
+ * EditDOC: implementation of the abstract methods of Edit
+ * for plain-text documents.
+ */
+#include <stdlib.h>
+#include "../../include/edit_subclass/editDOC.h"
+
+/* GTK calls this every time the buffer's "modified" flag flips */
+static void _doc_on_modified_changed(GtkTextBuffer *buffer, gpointer user_data) {
+    Edit *self = (Edit *)user_data;
+    self->mark_modified(self, gtk_text_buffer_get_modified(buffer));
+}
+
+static int _doc_open(Edit *self, const char *path) {
+    EditDOC *doc = (EditDOC *)self;   /* downcast: safe, base is first */
+    char *contents = NULL;
+    gsize len = 0;
+    GError *error = NULL;
+
+    if (!g_file_get_contents(path, &contents, &len, &error)) {
+        g_printerr("EditDOC: cannot open %s: %s\n", path, error->message);
+        g_clear_error(&error);
+        return -1;
+    }
+    /* GtkTextBuffer only accepts valid UTF-8 and an int length */
+    if (len > G_MAXINT || !g_utf8_validate(contents, (gssize)len, NULL)) {
+        g_printerr("EditDOC: %s is not valid UTF-8 text\n", path);
+        g_free(contents);
+        return -2;
+    }
+
+    gtk_text_buffer_set_text(doc->buffer, contents, (int)len);
+    g_free(contents);
+    gtk_text_buffer_set_modified(doc->buffer, FALSE);  /* freshly loaded */
+    self->set_path(self, path);
+    return 0;
+}
+
+static int _doc_save(Edit *self) {
+    EditDOC *doc = (EditDOC *)self;
+    GtkTextIter start, end;
+    GError *error = NULL;
+
+    if (self->path == NULL) return -1;
+
+    gtk_text_buffer_get_bounds(doc->buffer, &start, &end);
+    char *text = gtk_text_buffer_get_text(doc->buffer, &start, &end, FALSE);
+
+    /* atomic write: temp file + rename, never leaves a half-written file */
+    gboolean ok = g_file_set_contents(self->path, text, -1, &error);
+    g_free(text);
+
+    if (!ok) {
+        g_printerr("EditDOC: cannot save %s: %s\n", self->path, error->message);
+        g_clear_error(&error);
+        return -1;
+    }
+    gtk_text_buffer_set_modified(doc->buffer, FALSE);
+    return 0;
+}
+
+static void _doc_render(Edit *self, GtkWidget *container) {
+    EditDOC *doc = (EditDOC *)self;
+
+    if (self->widget != NULL) return;          /* already rendered */
+    if (!GTK_IS_BOX(container)) {
+        g_printerr("EditDOC: container must be a GtkBox\n");
+        return;
+    }
+
+    GtkWidget *view = gtk_text_view_new_with_buffer(doc->buffer);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), view);
+    gtk_widget_set_vexpand(scroll, TRUE);
+
+    gtk_box_append(GTK_BOX(container), scroll);
+    self->widget = scroll;
+}
+
+/* virtual destructor: only frees what EditDOC added */
+static void _doc_finalize(Edit *self) {
+    EditDOC *doc = (EditDOC *)self;
+    if (doc->buffer != NULL) {
+        g_signal_handler_disconnect(doc->buffer, doc->modified_id);
+        g_object_unref(doc->buffer);
+        doc->buffer = NULL;
+    }
+}
+
+/* constructor */
+Edit *new_edit_doc(void) {
+    EditDOC *doc = calloc(1, sizeof(EditDOC));  /* zeroed: every pointer NULL */
+    if (doc == NULL) return NULL;
+
+    edit_init(&doc->base);
+    doc->base.open = _doc_open;
+    doc->base.save = _doc_save;
+    doc->base.render = _doc_render;
+    doc->base.finalize = _doc_finalize;
+
+    doc->buffer = gtk_text_buffer_new(NULL);
+    doc->modified_id = g_signal_connect(doc->buffer, "modified-changed",
+                                        G_CALLBACK(_doc_on_modified_changed), doc);
+    return &doc->base;   /* upcast */
+}
+```
+
+GTK concepts used:
+
+- **Model / view:** `GtkTextBuffer` is the model (the text) and `GtkTextView` the view. The buffer is created in the constructor, so `open` works before `render` (a file can be loaded without being shown).
+- **Reference counting:** `gtk_text_buffer_new` gives 1 reference and the view takes its own. When the view is destroyed it drops its reference; `g_object_unref` in `finalize` drops ours, and the buffer is freed when the count reaches 0.
+- **`modified` without duplicated state:** `GtkTextBuffer` already tracks changes. Listening to `"modified-changed"` keeps `base.modified` in sync, and `save` resets it with `set_modified(FALSE)`.
+- **`g_signal_handler_disconnect` in `finalize`:** the callback receives `doc` as `user_data`; if someone kept the buffer alive after `free(self)`, the next signal would use freed memory.
+
+## 7. `Makefile`
+
+```make
+SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c)
+```
+
+And in the **4** rules `%.o: $(SRC_DIR)/%.c` (linux, linux-debug, win64, win64-debug), create the object's folder before compiling:
+
+```make
+$(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
+	@mkdir -p $(@D)
+	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
+```
+
+`%` matches `edit_subclass/editDOC`, so the object goes to `build/linux/edit_subclass/editDOC.o`. `gcc -o` does not create folders; `$(@D)` is the target's directory. The recipe line must start with a **TAB**.
+
+## 8. Pending decisions: `EditPDF` and `EditUML`
+
+- **PDF:** GTK4 cannot render PDF. The usual approach is **poppler-glib** (`poppler_document_new_from_file` + `poppler_page_render` on a `GtkDrawingArea` with cairo). It requires adding `poppler-glib-devel` and its MinGW equivalent to the `Dockerfile` (exact Fedora 40 MinGW package name not verified yet). Real PDF editing is out of scope; recommendation: a **viewer** (`save` returns "not supported", annotations at most).
+- **UML:** (a) text-based UML (PlantUML / Mermaid) with `EditUML` **inheriting from `EditDOC`** (two-level inheritance, plus an optional preview) — recommended; or (b) a graphical editor with `GtkDrawingArea` + cairo + mouse gestures (much more work).
+- **"DOC":** proposed as plain text / Markdown; `.docx` is not realistic without an external library.
+
+## 9. Status and next steps (0.1.0)
+
+- [ ] Write `include/edit.h` and `src/edit.c` (base class, `edit_init`, `new_edit_for_path`).
+- [ ] Write `include/edit_subclass/editDOC.h` and `src/edit_subclass/editDOC.c`.
+- [ ] Move `EditPDF` out of `edit.h` into `editPDF.h`.
+- [ ] `Makefile`: include `src/edit_subclass/*.c` and add `@mkdir -p $(@D)` to the 4 object rules.
+- [ ] `Makefile`: fix `HEADERS` / add header dependency tracking (`-MMD -MP`).
+- [ ] Wire a button in `main.c` to open a `.txt` with `new_edit_for_path` and test at runtime.
+- [ ] Decide the scope of `EditPDF` (poppler-glib viewer?) and `EditUML` (text-based, inheriting from `EditDOC`?).
+- [ ] Align `docs/class_diagram.md` with the final class names.
+- [ ] Bump to 0.1.0 when released: `Makefile` (`NAME`), headers, `README.md`, `CHANGELOG.md`.
