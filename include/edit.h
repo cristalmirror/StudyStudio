@@ -29,7 +29,7 @@ struct Edit {
     int (*open)(Edit *self, const char *path);
     int (*save)(Edit *self);
     void (*render)(Edit *self, GtkWidget *container);
-    void (*finalize)(Edit *self, GtkWidget *container);
+    void (*finalize)(Edit *self);
 
     /* Common: implemented once in edit.c */
     void (*close)(Edit *self);

@@ -75,7 +75,8 @@ void edit_init(Edit *self) {
 }
 
 Edit *new_edit_for_path(const char *path) {
-    const char *ext = strrr(path, '.');
+    const char *ext = strrchr(path, '.');
+    Edit *edit = NULL;
     if (ext == NULL) return NULL;
 
      if (g_ascii_strcasecmp(ext, ".txt") == 0 ||
