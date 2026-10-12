@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../include/edit.h"
-#include "../include/edit_subclass/editDOC.h"
+#include "../include/edit_subclass/editTXT.h"
 
 /* destructor: shared by every subclass */
 static void _edit_close(Edit *self) {
@@ -81,7 +81,7 @@ Edit *new_edit_for_path(const char *path) {
 
      if (g_ascii_strcasecmp(ext, ".txt") == 0 ||
         g_ascii_strcasecmp(ext, ".md") == 0) {
-        edit = new_edit_doc();
+        edit = new_edit_txt();
     }
     /* else if (... ".pdf") edit = new_edit_pdf(); */
 

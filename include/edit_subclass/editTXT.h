@@ -8,8 +8,8 @@
  */
 
 /* Plain-text document editor (.txt, .md) based on GtkTextView. */
-#ifndef EDIT_DOC_H
-#define EDIT_DOC_H
+#ifndef EDIT_TXT_H
+#define EDIT_TXT_H
 
 
 #include "../edit.h"
@@ -19,8 +19,8 @@ typedef struct {
     GtkTextBuffer *buffer;   /* document text, we own one reference */
     gulong modified_id;      /* "modified-changed" handler id */
     /* DOC-specific fields */
-} EditDOC;
+} EditTXT;
 
-Edit *new_edit_doc(void);
+Edit *new_edit_txt(void);
 
 #endif
