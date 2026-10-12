@@ -11,7 +11,7 @@ CC_LINUX  := gcc
 GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4)
 GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4)
 
-INCLUDES := -I$(INCLUDE_DIR)
+INCLUDES := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/third_party
 
 CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
 LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -larchive -llzma
