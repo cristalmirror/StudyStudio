@@ -1,18 +1,21 @@
 # Class diagram
 
-Status: draft for user approval; version 0.0.15.
+Status: draft for user approval; version 0.1.0.
 
-> [!WARNING]
-> **The `Edit` class and its subclasses (`EditPDF`, `EditUML`, `EditCode`,
-> `EditDocs`) are not implemented.** They are a design proposal for the next
-> version and do not exist in `src/` or `include/` yet. Everything else in this
-> diagram reflects the current code.
+> [!NOTE]
+> `Edit`, `EditTXT` and `EditDOC` are implemented in `src/edit.c` and
+> `src/edit_subclass/`. `EditPDF`, `EditUML` and `EditCode` are still
+> `<<planned>>`: `include/edit_subclass/editPDF.h` and `editUML.h` exist but
+> are empty. `main.c` creates editors from the per-subject menu
+> (`SubjectPanel`, `EditorKind`).
 
 StudyStudio is written in C, so it has no real classes. This diagram models the
 object-oriented patterns the code already uses: `struct Subject` with methods as
 function pointers (assigned in `new_subject()`, called as `self->method(self, ...)`),
 `new_subject()` / `close_subject()` as constructor and destructor, and
 `SubjectLogFunc` as an abstract interface that decouples `subject.c` from GTK.
+`Edit` applies the same pattern with inheritance: each subclass embeds `Edit`
+as its first member and assigns the abstract function pointers.
 
 ```mermaid
 classDiagram
@@ -20,8 +23,15 @@ classDiagram
 
     class MainGUI {
         <<module>>
-        -on_subject_clicked(GtkButton* button, gpointer user_data)$ void
         -on_add_clicked(GtkButton* button, gpointer user_data)$ void
+        -subject_menu_new(SubjectPanel* panel)$ GtkWidget*
+        -on_kind_clicked(GtkButton* button, gpointer user_data)$ void
+        -on_open_doc_finish(GObject* source, GAsyncResult* res, gpointer user_data)$ void
+        -on_save_doc_clicked(GtkButton* button, gpointer user_data)$ void
+        -on_close_doc_clicked(GtkButton* button, gpointer user_data)$ void
+        -subject_panel_free(gpointer data)$ void
+        -panel_button(const char* label, GCallback cb, SubjectPanel* panel)$ GtkWidget*
+        -app_status(AppState* state, const char* msg)$ void
         -on_load_clicked(GtkButton* button, gpointer user_data)$ void
         -on_load_dialog_finish(GObject* source, GAsyncResult* res, gpointer user_data)$ void
         -on_subject_log(const char* msg, void* user_data)$ void
@@ -33,7 +43,27 @@ classDiagram
         <<struct>>
         +GtkWidget* destiny_content
         +GtkWidget* window
+        +GtkWidget* footer_label
         +int counter
+    }
+
+    class EditorKind {
+        <<struct>>
+        +const char* label
+        +const char* filter_name
+        +const char* const* suffixes
+        +create() Edit*
+        +available() bool
+    }
+
+    class SubjectPanel {
+        <<struct>>
+        +AppState* state
+        +GtkWidget* menu_button
+        +GtkWidget* revealer
+        +GtkWidget* editor_box
+        +const EditorKind* kind
+        +Edit* edit
     }
 
     class SubjectLogFunc {
@@ -74,15 +104,65 @@ classDiagram
 
     class Edit {
         <<abstract>>
-        #char* path
-        #bool modified
+        +char* path
+        +bool modified
+        +GtkWidget* widget
         +open(const char* path)* int
         +save()* int
         +render(GtkWidget* container)* void
+        #finalize()* void
         +close() void
         +is_modified() bool
-        #mark_modified() void
-        #edit_init(const char* path) void
+        #mark_modified(bool modified) void
+        #set_path(const char* path) void
+        #set_widget(GtkWidget* widget) void
+        #edit_init(Edit* self)$ void
+        +new_edit_for_path(const char* path)$ Edit*
+    }
+
+    class EditTXT {
+        -Edit base
+        -GtkTextBuffer* buffer
+        -gulong modified_id
+        +const char* edit_txt_suffixes[]$
+        +new_edit_txt()$ Edit*
+        +open(const char* path) int
+        +save() int
+        +render(GtkWidget* container) void
+        #finalize() void
+    }
+
+    class EditDOC {
+        -Edit base
+        -LibreOfficeKitDocument* lok
+        -long width_twips
+        -long height_twips
+        -GtkWidget* area
+        -GtkAdjustment* vadj
+        -LibreOfficeKit* s_office$
+        +const char* edit_doc_suffixes[]$
+        +new_edit_doc()$ Edit*
+        +edit_doc_available()$ bool
+        +open(const char* path) int
+        +save() int
+        +render(GtkWidget* container) void
+        #finalize() void
+    }
+
+    class LibreOfficeKit {
+        <<external>>
+        +documentLoad(const char* url) LibreOfficeKitDocument*
+        +getError() char*
+        +freeError(char* err) void
+    }
+
+    class LibreOfficeKitDocument {
+        <<external>>
+        +initializeForRendering(const char* args) void
+        +getDocumentSize(long* w, long* h) void
+        +paintTile(unsigned char* buf, int cw, int ch, int x, int y, int w, int h) void
+        +saveAs(const char* url, const char* fmt, const char* opts) int
+        +destroy() void
     }
 
     class EditPDF {
@@ -106,35 +186,45 @@ classDiagram
         +render(GtkWidget* container) void
     }
 
-    class EditDocs {
-        <<planned>>
-        +open(const char* path) int
-        +save() int
-        +render(GtkWidget* container) void
-    }
-
     MainGUI ..> AppState : creates in activate()
     MainGUI ..> Subject : new_subject() / load_subject()
     MainGUI ..|> SubjectLogFunc : on_subject_log
+    MainGUI ..> SubjectPanel : creates in on_add_clicked()
+    MainGUI ..> EditorKind : s_editor_kinds[]
+    SubjectPanel --> AppState : state
+    SubjectPanel --> EditorKind : kind
+    SubjectPanel o--> Edit : edit (0..1)
+    EditorKind ..> EditTXT : new_edit_txt / edit_txt_suffixes
+    EditorKind ..> EditDOC : new_edit_doc / edit_doc_suffixes
     SubjectLogger o--> SubjectLogFunc : g_log_fn
     Subject ..> SubjectLogger : subject_log()
     Subject ..> WalkContext : walk_directory()
+    Edit <|-- EditTXT
+    Edit <|-- EditDOC
     Edit <|-- EditPDF
     Edit <|-- EditUML
     Edit <|-- EditCode
-    Edit <|-- EditDocs
+    Edit ..> EditTXT : new_edit_for_path() .txt .md
+    Edit ..> EditDOC : new_edit_for_path() office formats
+    EditDOC o--> LibreOfficeKitDocument : lok
+    EditDOC ..> LibreOfficeKit : s_office (lok_init once)
+    LibreOfficeKit ..> LibreOfficeKitDocument : documentLoad()
 
     note for Subject "Methods are function pointers assigned in new_subject()\nand called as self->method(self, ...)"
-    note for Edit "NOT IMPLEMENTED: planned for the next version.\nAbstract methods are NULL in edit_init().\nEach subclass embeds Edit as its first member\nand assigns its own open/save/render."
+    note for Edit "Abstract methods are NULL in edit_init().\nEach subclass embeds Edit as its first member\nand assigns its own open/save/render/finalize.\nrender stores its widget with set_widget (weak pointer)."
+    note for EditDOC "All LibreOfficeKit code lives in editDOC.c.\ns_office is a process-wide singleton\nand is never destroyed."
 ```
 
 ## Reading the diagram
 
 - `<<module>>` marks a source file that groups `static` functions and globals
   (`src/main.c`, `src/subject.c`) rather than a struct.
-- `<<planned>>` marks a class that is not implemented yet (see the warning at
-  the top). `Edit` keeps its `<<abstract>>` label and carries the same warning
-  in its note.
+- `<<planned>>` marks a class that is not implemented yet (see the note at the
+  top).
+- `<<external>>` marks a C API provided by another project. `LibreOfficeKit`
+  and `LibreOfficeKitDocument` are LibreOffice's structs; their methods are
+  reached through `pClass` (`office->pClass->documentLoad(office, ...)`). Only
+  the methods StudyStudio calls are listed.
 - `[Win32]` / `[Linux]` members only exist under the matching `#ifdef _WIN32`
   branch of `include/subject.h`.
 - `$` (underlined when rendered) marks `static` functions and globals.
@@ -143,6 +233,8 @@ classDiagram
   subclass must assign.
 - `#` marks protected members: meant to be used by the `Edit` subclasses, not by
   the rest of the application.
+- `-` marks private members: fields of a subclass struct that only its own
+  `.c` file touches, and `static` globals such as `s_office`.
 - Pointer types are written as in C (`GtkWidget*`, `uint8_t**`).
 - Private helpers in `src/subject.c` that are not exposed through `Subject`
   (for example `_unpack_tar_buffer`, `_derive_extract_dir`) are omitted.
@@ -152,46 +244,86 @@ classDiagram
 | From | To | Meaning |
 | --- | --- | --- |
 | `MainGUI` | `AppState` | `activate()` allocates the state and passes it as `user_data` to the callbacks. |
+| `MainGUI` | `SubjectPanel` | `on_add_clicked()` creates one panel per subject and ties it to the subject box with `g_object_set_data_full`; the panel callbacks receive it as `user_data`. |
+| `MainGUI` | `EditorKind` | `s_editor_kinds[]` is the static table behind the subject menu (`subject_menu_new()`). |
+| `SubjectPanel` | `Edit` | Holds the open editor (or `NULL`); `subject_panel_free()` closes it. |
+| `EditorKind` | `EditTXT`, `EditDOC` | Each row points to a subclass constructor and its exported suffix list; PDF/UML rows are placeholders (`suffixes == NULL`). |
 | `MainGUI` | `Subject` | `on_load_dialog_finish()` creates a `Subject` and calls `load_subject()`. |
 | `MainGUI` | `SubjectLogFunc` | `on_subject_log()` is the concrete implementation that writes to the footer label. |
 | `SubjectLogger` | `SubjectLogFunc` | Stores the registered callback in `g_log_fn` via `subject_set_logger()`. |
 | `Subject` | `SubjectLogger` | Reports status and errors through `subject_log()`. |
 | `Subject` | `WalkContext` | Windows `walk_directory()` uses it to carry the output file and LZMA stream. |
-| `EditPDF`, `EditUML`, `EditCode`, `EditDocs` | `Edit` | **Planned, not implemented.** Inheritance: each subclass embeds `Edit` as its first member, reuses the common operations (`close`, `is_modified`, `mark_modified`, `edit_init`) and implements the abstract ones (`open`, `save`, `render`). |
+| `EditTXT`, `EditDOC` | `Edit` | Inheritance: each subclass embeds `Edit` as its first member, calls `edit_init()`, reuses the common operations (`close`, `is_modified`, `mark_modified`, `set_path`) and implements the abstract ones (`open`, `save`, `render`, `finalize`). |
+| `Edit` | `EditTXT`, `EditDOC` | Factory: `new_edit_for_path()` picks the subclass by searching `edit_txt_suffixes` / `edit_doc_suffixes` (the latter only if `edit_doc_available()`), then calls `open()`. |
+| `EditDOC` | `LibreOfficeKitDocument` | Aggregation: owns the loaded document (`lok`) and calls `destroy()` on it in `finalize`. |
+| `EditDOC` | `LibreOfficeKit` | Uses the process-wide `s_office` created once by `lok_init()`; it is shared by every `EditDOC` and never destroyed. |
+| `EditPDF`, `EditUML`, `EditCode` | `Edit` | **Planned, not implemented.** Same inheritance contract as `EditTXT`/`EditDOC`. |
 
-## `Edit` hierarchy (proposed, not yet implemented)
+## `Edit` hierarchy
 
-> [!WARNING]
-> Pending for the next version. None of the code below exists in the project
-> yet; it is a sketch of the intended design and may change when it is
-> implemented.
-
-`Edit` is an abstract base for the editors. It holds the state and operations
-shared by every editor, while each subclass supplies the behavior that depends
-on the file type. In C this follows the same pattern as `Subject`:
+`Edit` (`include/edit.h`, `src/edit.c`) is the abstract base for the editors.
+It holds the state and operations shared by every editor, while each subclass
+supplies the behavior that depends on the file type. In C this follows the
+same pattern as `Subject`:
 
 ```c
 typedef struct Edit Edit;
 struct Edit {
     char *path;
     bool modified;
+    GtkWidget *widget;
 
     /* abstract: assigned by each subclass */
     int  (*open)(Edit *self, const char *path);
     int  (*save)(Edit *self);
     void (*render)(Edit *self, GtkWidget *container);
+    void (*finalize)(Edit *self);
 
     /* common: implemented once in edit.c */
     void (*close)(Edit *self);
     bool (*is_modified)(Edit *self);
+    void (*mark_modified)(Edit *self, bool modified);
+    void (*set_path)(Edit *self, const char *path);
+    void (*set_widget)(Edit *self, GtkWidget *widget);   /* weak pointer */
 };
 
 typedef struct {
-    Edit base;          /* must be the first member */
-    /* PDF-specific fields */
-} EditPDF;
+    Edit base;                    /* must be the first member */
+    LibreOfficeKitDocument *lok;
+    /* ... */
+} EditDOC;
 ```
 
-Because `base` is the first member, an `EditPDF *` can be safely cast to
+Because `base` is the first member, an `EditDOC *` can be safely cast to
 `Edit *`, so the rest of the application can work with any editor through the
-`Edit` interface (Liskov substitution).
+`Edit` interface (Liskov substitution). `close()` is the shared destructor: it
+drops the weak pointer on `widget`, removes the widget from its parent box,
+calls the subclass `finalize()` and then frees `path` and the object.
+
+| Class | Files | Formats | Engine |
+| --- | --- | --- | --- |
+| `EditTXT` | `editTXT.h`, `editTXT.c` | `.txt`, `.md` | `GtkTextView` + `GtkTextBuffer` |
+| `EditDOC` | `editDOC.h`, `editDOC.c` | `.docx`, `.doc`, `.odt`, `.rtf`, `.xlsx`, `.xls`, `.ods`, `.pptx`, `.ppt`, `.odp` | LibreOfficeKit (installed LibreOffice) |
+
+See [editTXT.c](editTXT.c.md) and [editDOC.c](editDOC.c.md) for details.
+
+### Subject menu (`main.c`)
+
+Pressing a subject button (`GtkMenuButton`) opens a popover with one entry per
+`EditorKind` row. Choosing a kind opens a file dialog filtered by that kind's
+suffixes; the chosen file is opened with the kind's constructor and rendered
+in the subject's `GtkRevealer`. Text and office documents are available;
+PDF and UML are shown greyed out until `EditPDF` / `EditUML` exist.
+
+### Diagram review (2026-10-12)
+
+Differences found between the previous draft and the code, fixed above:
+
+- `Edit` was marked as not implemented; it is.
+- `Edit` was missing `widget`, the abstract `finalize` and the common
+  `set_path`.
+- `mark_modified` takes `bool modified`; `edit_init` takes `Edit *self`, not a
+  path, and is a free function (`$`), not a method.
+- The factory `new_edit_for_path()` was missing.
+- The planned `EditDocs` became `EditTXT` (plain text) and `EditDOC`
+  (LibreOfficeKit); `EditPDF`, `EditUML` and `EditCode` remain planned.

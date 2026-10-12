@@ -1638,3 +1638,85 @@ The saved ZIP passed `zipfile.testzip()`, the binary entry was byte-identical an
 - [ ] Move `EditPDF` out of `edit.h` into `editPDF.h`; decide the scope of `EditPDF` / `EditUML`.
 - [ ] Align `docs/class_diagram.md` with the final class names (`EditDOC`, `EditDOCX`, ...).
 - [ ] Bump to 0.1.0 when released: `Makefile` (`NAME`), headers, `README.md`, `CHANGELOG.md`.
+
+---
+
+### cristalmirror IA secion ### [2026-10-12] — next 0.1.0
+
+Log of an AI-assisted session on StudyStudio. Decision: LibreOffice is embedded through **LibreOfficeKit (LOK)** as the engine for every office format, and all the LOK code lives in `editDOC.h` / `editDOC.c`. At the user's explicit request ("implementa los cambios") **the AI implemented this session's changes directly**. `make clean && make linux win64` inside `mi_app_builder` builds and links both targets with no new warnings. Nothing has been run yet.
+
+---
+
+## 1. LOK spike (2026-10-11, scratchpad, not in the repo)
+
+A standalone C program against the host's LibreOffice 26.8 (`/usr/lib/libreoffice/program`) proved that:
+
+- `lok_init` + `documentLoad` of a `.docx` work from pure C.
+- `paintTile` renders the page correctly (BGRA buffer converted to PNG).
+- `saveAs(..., "docx", NULL)` keeps the formatting.
+
+Problems found:
+
+| Problem | Resolution |
+| --- | --- |
+| `lokdocview` (LibreOffice's ready-made widget) is GTK3, unusable with GTK4. | Own widget in `EditDOC`: `GtkDrawingArea` + `paintTile` of the visible rectangle. |
+| `LibreOfficeKitEnums.h` does not compile as C (`static_cast`, `nullptr`). | Vendored, patched headers (section 3). |
+| SIGSEGV at exit after `office->destroy()`, in an `atexit` handler of `libswlo` (`desktop_LOKClipboard_get_implementation`). | `s_office` is never destroyed. To verify at run time. |
+| Key events are asynchronous: `saveAs` ran before the typed key was applied. | Phase 2: drive the UI from LOK callbacks instead of assuming synchronous edits. |
+| Windows LOK untested. | Phase 4. |
+
+## 2. Alternatives considered
+
+- **Rewrite the UI in C++/Qt6:** rejected for LOK alone. C++ only removes the header problem: there is no Qt LOK widget either, the exit crash does not depend on the toolkit, and the project goal is learning C + GTK4.
+- **C++ glue file (`lok_glue.cpp`) with an `extern "C"` API:** unnecessary once the three C++ spots in the headers are patched.
+- **Text-only `EditDOCX` (libarchive + libxml2), designed on 2026-10-11:** superseded by `EditDOC`; kept in this log only as a possible fallback when LibreOffice is missing.
+
+## 3. Changes made
+
+- `editDOC.h`/`editDOC.c` (the `GtkTextView` editor) renamed to `editTXT.h`/`editTXT.c` (`EditTXT`, `new_edit_txt`); standard header added, leading blank line removed, trailing newline added.
+- New `EditDOC` (phase 1, view + save): see [editDOC.c](editDOC.c.md).
+- `include/third_party/LibreOfficeKit/`: LOK 24.2 headers (MPL-2.0) with `StudyStudio:` patches: `lokCallbackTypeToString()` under `#ifdef __cplusplus`; C casts instead of the two Windows `reinterpret_cast` in `LibreOfficeKitInit.h`. `editDOC.c` includes `<stdbool.h>` first because `LibreOfficeKit.h` uses `bool` without it (MinGW error).
+- `Makefile`: `INCLUDES := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/third_party`. No link flags needed.
+- `src/edit.c`: factory maps `.txt`/`.md` → `EditTXT` and office extensions → `EditDOC` (only if `edit_doc_available()`).
+- Docs: `class_diagram.md` reviewed against the code and updated; new `edit.c.md`, `editTXT.c.md`, `editDOC.c.md`; `docs/README.md`, `docs/Makefile.md`, `README.md`, `CHANGELOG.md`.
+
+## 4. LOK phases
+
+1. **View + save** — done (compiles; not run).
+2. **Input:** `postKeyEvent` / `postMouseEvent` from GTK controllers; `registerCallback` with `LOK_CALLBACK_INVALIDATE_TILES` and `DOCUMENT_SIZE_CHANGED`, forwarded to the GTK thread with `g_idle_add`; `mark_modified` from callbacks.
+3. **Toolbar:** `postUnoCommand` (`.uno:Bold`, `.uno:Undo`, ...), save via `.uno:Save` if `saveAs` over the opened file fails.
+4. **Windows:** install path detection and runtime test; Calc/Impress parts (`setPart`).
+
+## 5. Status and next steps (0.1.0)
+
+- [x] `editDOC.h` / `editDOC.c` → `editTXT`: standard header, blank first line, trailing newline.
+- [x] `EditDOC` phase 1 on LibreOfficeKit; vendored headers; factory; `Makefile`.
+- [x] `docs/class_diagram.md` aligned with the code.
+- [x] `main.c` subject menu + panel; weak pointer (`set_widget`) — see section 6.
+- [ ] Runtime test of `EditDOC`: open a `.docx`, scroll, save, close the app (exit crash?).
+- [ ] LOK phase 2 (input + callbacks).
+- [x] `interface.ui`: larger default size (900×700).
+- [ ] `Makefile`: `-MMD -MP`.
+- [x] Bump to 0.1.0 (2026-10-12).
+
+## 6. Subject menu: choose the kind of document to edit
+
+Requested by the user: pressing a subject button opens a menu to pick what to edit (PDF, .doc, .txt, .uml) and loads the matching editor, starting with the two that exist. Designed in chat, then **implemented by the AI at the user's request ("hazlo tú")**. `make clean && make linux win64` builds both targets with no new warnings; the class diagram parses with Mermaid 11.4.1. Not run yet.
+
+```
+[Materia Num #1 ▾]                 GtkMenuButton
+   ├ 📝 Texto (.txt, .md)          -> EditTXT
+   ├ 📄 Documento (.docx, ...)     -> EditDOC (if LibreOffice is found)
+   ├ 📕 PDF (próximamente)         greyed out
+   └ 📐 UML (próximamente)         greyed out
+GtkRevealer: [💾 Guardar] [✖ Cerrar] + editor_box (500 px)
+```
+
+Design points:
+
+- **`EditorKind` table** (`s_editor_kinds` in `main.c`): label, filter name, suffix list, constructor, optional `available()`. Adding `EditPDF` means filling its row (open/closed).
+- **`edit_txt_suffixes` / `edit_doc_suffixes`**, exported by each subclass without the dot (the form `gtk_file_filter_add_suffix` expects): one list per format, shared by the factory and the menu.
+- **Popover of frameless buttons instead of `GMenu` + `GAction`:** each entry calls a C callback directly; the row pointer travels as object data `"kind"`.
+- **`available()` is checked on click**, not when building the menu, because `lok_init` takes a second or two.
+- **`Edit.set_widget()`** (common method, weak pointer) replaces the per-subclass weak pointer of the 2026-10-11 section 5: the panel is freed through `g_object_set_data_full` after GTK has destroyed the editor's widget, so `close()` must not touch it.
+

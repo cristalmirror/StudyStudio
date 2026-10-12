@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- `src/subject.c`: `_make_subject(self)` stub, intended to create the
-  resources a subject needs (folders, tools, edits). Not implemented yet.
-
 ### Known Issues
+- `EditDOC` is view-only (no keyboard/mouse input yet), targets Writer
+  rendering, and has only been compiled, not run. Pending runtime checks:
+  clean exit without `office->destroy()` (it crashed in the spike),
+  `saveAs` over the opened file, and LibreOffice on Windows.
+- The subject menu has not been run yet (built for Linux and Windows only).
+  Closing a document with unsaved changes is refused with a footer message;
+  there is no Save/Discard dialog. The first office document blocks the UI
+  while LibreOffice starts.
 - `src/subject.c`: `_make_subject` is empty, has no prototype in
   `subject.h`, and is not wired into `struct Subject`/`new_subject`.
 - Windows's `load_subject` extraction path (`_derive_extract_dir` +
@@ -44,6 +48,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.1.0] - 2026-10-12
+
+### Added
+- `include/edit.h`, `src/edit.c`: abstract `Edit` base "class" for every
+  editor (inheritance in C: the subclass embeds `Edit` as its first member),
+  with abstract `open`/`save`/`render`/`finalize`, common
+  `close`/`is_modified`/`mark_modified`/`set_path`, `edit_init()` and the
+  `new_edit_for_path()` factory (see `docs/edit.c.md`).
+- `include/edit_subclass/editDOC.h`, `src/edit_subclass/editDOC.c`: new
+  `EditDOC`, an office document editor embedding LibreOffice through
+  LibreOfficeKit (phase 1: view and save). It finds LibreOffice through
+  `STUDYSTUDIO_LO_PATH` or the usual install paths, keeps one process-wide
+  `LibreOfficeKit` instance, paints only the visible part of the document
+  with `paintTile` into a `GtkDrawingArea` (fit-to-width zoom, own
+  `GtkAdjustment` and scrollbar) and saves with `saveAs` in the original
+  format. New `edit_doc_available()` (see `docs/editDOC.c.md`).
+- `include/third_party/LibreOfficeKit/`: LibreOfficeKit 24.2 headers
+  (MPL-2.0), patched to compile as C: `lokCallbackTypeToString()` wrapped in
+  `#ifdef __cplusplus`, and the two Windows `reinterpret_cast` in
+  `LibreOfficeKitInit.h` replaced by C casts.
+- `src/edit.c`: the factory opens `.docx`, `.doc`, `.odt`, `.rtf`, `.xlsx`,
+  `.xls`, `.ods`, `.pptx`, `.ppt` and `.odp` with `EditDOC` when LibreOffice
+  is available.
+- `docs/edit.c.md`, `docs/editTXT.c.md`, `docs/editDOC.c.md`.
+- `src/main.c`: each subject button is now a `GtkMenuButton` whose popover
+  asks which kind of document to edit: text (`EditTXT`), office document
+  (`EditDOC`), and greyed-out "(próximamente)" PDF and UML entries. The
+  choice opens a `GtkFileDialog` filtered to that kind, and the editor is
+  rendered in a per-subject `GtkRevealer` with `💾 Guardar` / `✖ Cerrar`
+  buttons. New `EditorKind` table (`s_editor_kinds`), `SubjectPanel`,
+  `app_status()` and `AppState.footer_label`.
+- `Edit.set_widget()`: stores the editor's root widget as a GObject weak
+  pointer, so `close()` is safe after GTK destroyed the widget (window
+  closed). `EditTXT` and `EditDOC` use it in `render`.
+- `edit_txt_suffixes` / `edit_doc_suffixes`: each editor exports the file
+  suffixes it opens; the factory and the menu filters share them.
+- `src/subject.c`: `_make_subject(self)` stub, intended to create the
+  resources a subject needs (folders, tools, edits). Not implemented yet.
+
+### Changed
+- Bumped the project version to `0.1.0`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version`/`Last edited` fields of the file headers, the
+  "Status"/baseline version lines and `studystudio-0.0.x` mentions across
+  `docs/*.md`, and the commit example in `CLAUDE.md`.
+- `Makefile`: compiles `src/edit_subclass/*.c` and creates the object
+  subdirectories (`@mkdir -p $(@D)`).
+- `editDOC.h`/`editDOC.c` (the `GtkTextView` plain-text editor) renamed to
+  `editTXT.h`/`editTXT.c`: `EditDOC` → `EditTXT`, `new_edit_doc` →
+  `new_edit_txt`. Both files now have the standard header; `editTXT.h` lost
+  its leading blank line and both end with a newline.
+- `Makefile`: `INCLUDES` adds `-Iinclude/third_party`.
+- `src/edit.c`: the factory searches the subclasses' suffix lists through
+  `_suffix_in()` instead of its own extension list.
+- `interface.ui`: default window size 900×700 (was 300×400).
+- `src/main.c`: `on_subject_clicked` (which only printed the label) removed.
+- `docs/class_diagram.md`: the `Edit` hierarchy now matches the code (`widget`,
+  `finalize`, `set_path`, `mark_modified(bool)`, `edit_init(Edit*)`, factory)
+  and shows `EditTXT`, `EditDOC` and the LibreOfficeKit types; the planned
+  `EditDocs` was removed.
 
 ## [0.0.15] - 2026-09-29
 

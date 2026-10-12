@@ -34,6 +34,7 @@ The project showcases:
 - 📦 **Dynamic widgets**: Add elements to the UI at runtime
 - 📜 **Scrollable content**: `GtkScrolledWindow` for handling long lists
 - ⚡ **Fast builds**: Uses precompiled Fedora packages instead of building from source
+- 📄 **Office documents (in development)**: `.docx`, `.odt`, `.xlsx`, `.pptx`... are opened through LibreOfficeKit; it needs LibreOffice installed at run time (or `STUDYSTUDIO_LO_PATH` pointing to its `program` folder)
 
 ---
 
@@ -123,14 +124,21 @@ A Windows debug variant is also available via `make win64-debug`, producing `bui
 StudyStudio/
 ├── src/
 │ ├── main.c # Application entry point and callbacks
-│ └── subject.c # Implementations 
+│ ├── subject.c # Implementations 
+│ ├── edit.c # Edit base class and editor factory
+│ └── edit_subclass/
+│   ├── editTXT.c # Plain-text editor (.txt, .md)
+│   └── editDOC.c # Office editor through LibreOfficeKit
 ├── build/
 │ ├── linux/ # Linux object files (release)
 │ ├── linux-debug/ # Linux object files (debug, for GDB)
 │ ├── win64/ # Windows object files (release)
 │ └── win64-debug/ # Windows object files (debug)
 ├──include
-│ └ subject.h #definitions subject manager
+│ ├ subject.h #definitions subject manager
+│ ├ edit.h # Edit base class
+│ ├ edit_subclass/ # editTXT.h, editDOC.h, ...
+│ └ third_party/LibreOfficeKit/ # vendored LOK headers (MPL-2.0, patched for C)
 ├── interface.ui # GTK4 UI definition (XML)
 ├── resources.xml
 ├── CLAUDE.md #claud code context added
