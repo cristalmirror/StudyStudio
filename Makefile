@@ -38,7 +38,7 @@ LDFLAGS_WIN_DEBUG := $(GTK_LIBS_WIN) -larchive -llzma -static-libgcc
 # ==========================================
 # Source files
 # ==========================================
-SRCS := $(wildcard $(SRC_DIR)/*.c)
+SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c)
 HEADERS := $(wildcard $(INCLUDE_DIR)/.h)
 
 OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
@@ -68,6 +68,7 @@ $(BUILD_DIR)/$(NAME)_linux: $(OBJS_LINUX)
 	@echo -e "\033[32m[✓] Compiled for Linux:\033[0m $@\n"
 
 $(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
+	@mkdir -p $(@D)
 	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
 
 $(BUILD_DIR)/linux/resources.o: $(RESOURCE_SRC) | setup
@@ -81,6 +82,7 @@ $(BUILD_DIR)/$(NAME)_linux_debug: $(OBJS_LINUX_DEBUG)
 	@echo -e "\033[32m[✓] Compiled for Linux (debug): \033[0m $@ \n"
 
 $(BUILD_DIR)/linux-debug/%.o: $(SRC_DIR)/%.c | setup
+	@mkdir -p $(@D)
 	$(CC_LINUX) $(CFLAGS_LINUX_DEBUG) -c $< -o $@
 
 $(BUILD_DIR)/linux-debug/resources.o: $(RESOURCE_SRC) | setup
@@ -97,6 +99,7 @@ $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 	@echo -e "\033[31m[✓] Compiled for Windows:\033[0m $@\n"
 
 $(BUILD_DIR)/win64/%.o: $(SRC_DIR)/%.c | setup
+	@mkdir -p $(@D)
 	$(CC_WIN64) $(CFLAGS_WIN) -c $< -o $@
 
 $(BUILD_DIR)/win64/resources.o: $(RESOURCE_SRC) | setup
@@ -110,6 +113,7 @@ $(BUILD_DIR)/$(NAME)_win64_debug.exe: $(OBJS_WIN64_DEBUG)
 	@echo -e "\033[31m[✓] Compiled for Windows (debug):\033[0m $@\n"
 
 $(BUILD_DIR)/win64-debug/%.o: $(SRC_DIR)/%.c | setup
+	@mkdir -p $(@D)
 	$(CC_WIN64) $(CFLAGS_WIN_DEBUG) -c $< -o $@
 
 $(BUILD_DIR)/win64-debug/resources.o: $(RESOURCE_SRC) | setup
