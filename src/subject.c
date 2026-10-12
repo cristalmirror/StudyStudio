@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.0.15
+ * Version: 0.1.0
  * License: GPLv3
- * Last edited: 2026-09-29
+ * Last edited: 2026-10-12
  */
 
 /*
