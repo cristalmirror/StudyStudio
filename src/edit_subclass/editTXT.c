@@ -1,9 +1,19 @@
+/**
+ * Developer: cristalmirror
+ * Repository: https://github.com/cristalmirror/StudyStudio
+ * Version: 0.1.0
+ * License: GPLv3
+ * Last edited: 2026-10-12
+ */
+
 /*
  * EditTXT: implementation of the abstract methods of Edit
- * for plain-text documents.
+ * for plain-text documents (.txt, .md).
  */
 #include <stdlib.h>
 #include "../../include/edit_subclass/editTXT.h"
+
+const char *const edit_txt_suffixes[] = { "txt", "md", NULL };
 
 /* GTK calls this every time the buffer's "modified" flag flips */
 static void _txt_on_modified_changed(GtkTextBuffer *buffer, gpointer user_data) {
@@ -77,7 +87,7 @@ static void _txt_render(Edit *self, GtkWidget *container) {
     gtk_widget_set_vexpand(scroll, TRUE);
 
     gtk_box_append(GTK_BOX(container), scroll);
-    self->widget = scroll;
+    self->set_widget(self, scroll);
 }
 
 /* virtual destructor: only frees what EditTXT added */

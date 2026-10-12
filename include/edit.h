@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.0
  * License: GPLv3
- * Last edited: 2026-10-06
+ * Last edited: 2026-10-12
  */
 
 /*
@@ -36,6 +36,7 @@ struct Edit {
     bool (*is_modified)(Edit *self);
     void (*mark_modified)(Edit *self, bool modified);
     void (*set_path)(Edit *self,const char *path);
+    void (*set_widget)(Edit *self, GtkWidget *widget);
 
 };
 

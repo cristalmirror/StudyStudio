@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.0
  * License: GPLv3
- * Last edited: 2026-10-06
+ * Last edited: 2026-10-12
  */
 /*
  * Common operations of the Edit hierarchy and the factory that
@@ -13,6 +13,7 @@
 #include <string.h>
 #include "../include/edit.h"
 #include "../include/edit_subclass/editTXT.h"
+#include "../include/edit_subclass/editDOC.h"
 
 /* destructor: shared by every subclass */
 static void _edit_close(Edit *self) {
@@ -23,11 +24,12 @@ static void _edit_close(Edit *self) {
      */
 
     if (self->widget != NULL) {
-        GtkWidget *parent = gtk_widget_get_parent(self->widget);
+        GtkWidget *widget = self->widget;
+        self->set_widget(self, NULL);   /* drop the weak pointer before free(self) */
+        GtkWidget *parent = gtk_widget_get_parent(widget);
         if (parent != NULL && GTK_IS_BOX(parent)) {
-            gtk_box_remove(GTK_BOX(parent), self->widget);
+            gtk_box_remove(GTK_BOX(parent), widget);
         }
-        self->widget = NULL;
     }
 
     /* Let the subclass free its own fields (virtual destructor) */
@@ -55,6 +57,16 @@ static void _edit_set_path(Edit *self, const char *path) {
     self->path = copy;
 }
 
+/* GTK sets self->widget to NULL by itself if the widget is destroyed
+ * (e.g. the window closes) before close() runs: weak pointer */
+static void _edit_set_widget(Edit *self, GtkWidget *widget) {
+    if (self->widget != NULL)
+        g_object_remove_weak_pointer(G_OBJECT(self->widget), (gpointer *)&self->widget);
+    self->widget = widget;
+    if (widget != NULL)
+        g_object_add_weak_pointer(G_OBJECT(widget), (gpointer *)&self->widget);
+}
+
 void edit_init(Edit *self) {
     self->path = NULL;
     self->modified = false;
@@ -71,7 +83,16 @@ void edit_init(Edit *self) {
     self->is_modified = _edit_is_modified;
     self->mark_modified = _edit_mark_modified;
     self->set_path = _edit_set_path;
+    self->set_widget = _edit_set_widget;
 
+}
+
+/* true if suffix (without the dot) is in the NULL-terminated list */
+static bool _suffix_in(const char *suffix, const char *const *list) {
+    for (int i = 0; list[i] != NULL; i++) {
+        if (g_ascii_strcasecmp(suffix, list[i]) == 0) return true;
+    }
+    return false;
 }
 
 Edit *new_edit_for_path(const char *path) {
@@ -79,9 +100,12 @@ Edit *new_edit_for_path(const char *path) {
     Edit *edit = NULL;
     if (ext == NULL) return NULL;
 
-     if (g_ascii_strcasecmp(ext, ".txt") == 0 ||
-        g_ascii_strcasecmp(ext, ".md") == 0) {
+    ext++;   /* skip the dot: the suffix lists have none */
+
+    if (_suffix_in(ext, edit_txt_suffixes)) {
         edit = new_edit_txt();
+    } else if (_suffix_in(ext, edit_doc_suffixes) && edit_doc_available()) {
+        edit = new_edit_doc();
     }
     /* else if (... ".pdf") edit = new_edit_pdf(); */
 
