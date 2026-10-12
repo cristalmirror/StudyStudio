@@ -901,3 +901,740 @@ $(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
 - [ ] Decide the scope of `EditPDF` (poppler-glib viewer?) and `EditUML` (text-based, inheriting from `EditDOC`?).
 - [ ] Align `docs/class_diagram.md` with the final class names.
 - [ ] Bump to 0.1.0 when released: `Makefile` (`NAME`), headers, `README.md`, `CHANGELOG.md`.
+
+
+---
+
+### cristalmirror IA secion ### [2026-10-11] — next 0.1.0
+
+Log of an AI-assisted session on StudyStudio. Covers the review of the first manual implementation of the `Edit` hierarchy (2026-10-06 design), the `Makefile` changes to compile `src/edit_subclass/`, and the design of a **drop-down editing panel per subject** in `main.c` with a new **`EditDOCX`** subclass (text-only `.docx` editing). The `Makefile` change was **applied by the AI at the user's request**; everything else is **reference code pending manual implementation**. That code was compiled in an isolated copy (`make linux win64` inside `studystudio-builder`, no new warnings) and `EditDOCX` was tested at runtime with a headless harness (open → edit → save → reopen). The GUI panel has **not** been tested by hand yet.
+
+---
+
+## 1. Compilation review of the `Edit` hierarchy
+
+`src/edit.c` was already part of the build (`SRCS := $(wildcard src/*.c)`), so `main` did not compile:
+
+| Error | Cause | Fix |
+| --- | --- | --- |
+| `too few arguments to function 'self->finalize'` | `edit.h` declared `finalize(Edit *, GtkWidget *)` | `void (*finalize)(Edit *self);` — a destructor needs no container |
+| `implicit declaration of function 'strrr'` (+ `int` → pointer) | Typo; C89 implicit `int strrr()` | `strrchr(path, '.')` (last `.`: `notes.v2.md` → `.md`) |
+| `'edit' undeclared` | Missing local | `Edit *edit = NULL;` (must be `NULL` if no extension matches) |
+| `implicit declaration of function 'new_edit_doc'` | No prototype in `editDOC.h` | `Edit *new_edit_doc(void);` — `(void)` means "no arguments", `()` means "unspecified" |
+
+Also: `editDOC.h` got an include guard, the relative include `"../edit.h"` (relative to the header itself) and the standard file header. Pending cosmetics: blank first line and missing trailing newline in `editDOC.h`, missing standard header in `editDOC.c`.
+
+> [!NOTE]
+> Without the prototype, the compiler assumes `new_edit_doc` returns `int`. On x86-64 that is a real bug, not just a warning: a pointer is 64 bits and an `int` 32, so the upper half of the address would be lost.
+
+## 2. `Makefile`: compiling `src/edit_subclass/` (applied)
+
+```make
+SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c)
+```
+
+And in the 4 rules `%.o: $(SRC_DIR)/%.c` (linux, linux-debug, win64, win64-debug):
+
+```make
+$(BUILD_DIR)/linux/%.o: $(SRC_DIR)/%.c | setup
+	@mkdir -p $(@D)
+	$(CC_LINUX) $(CFLAGS_LINUX) -c $< -o $@
+```
+
+- `wildcard` is not recursive, hence the second pattern.
+- `%` matches `edit_subclass/editDOC`, so the object goes to `build/linux/edit_subclass/editDOC.o`; `$(@D)` is the target's directory and `gcc -o` does not create folders.
+
+Result: `make clean && make linux win64` builds both targets; only the two pre-existing `unused parameter` warnings in `subject.c` remain. `HEADERS` is still broken, so **`make clean` after every `.h` change** still applies.
+
+## 3. Format decision: `.doc` / `.docx`
+
+GTK4 cannot read Word files. `.docx` is a ZIP with XML inside (`word/document.xml`); `.doc` is a binary OLE format, not realistic to implement by hand. Options considered: open in an external app (`GtkFileLauncher`), **native text-only `.docx`**, convert through LibreOffice, or plain text only. **Chosen: native text-only `.docx`** with libarchive (already linked, reads/writes ZIP) + libxml2 (already installed as a GTK4 dependency, Linux and MinGW).
+
+> [!WARNING]
+> Saving rewrites the paragraphs as plain text: bold, styles and tables are **lost** (tables become plain paragraphs). Test with copies of real documents. `.doc` is not supported (the factory returns `NULL`).
+
+## 4. Design: two-level inheritance `Edit → EditDOC → EditDOCX`
+
+A `.docx` is edited exactly like a `.txt` (a `GtkTextBuffer` in a `GtkTextView`); only reading/writing the file differs. `EditDOCX` therefore inherits `render`, `finalize` and the buffer from `EditDOC` and overrides only `open` / `save`.
+
+```
+EditDOCX in memory:
+┌───────────────────────────┐  <- (EditDOCX *) == (EditDOC *) == (Edit *)
+│ EditDOC doc               │
+│ ┌───────────────────────┐ │
+│ │ Edit base             │ │     path, modified, widget, methods...
+│ ├───────────────────────┤ │
+│ │ GtkTextBuffer *buffer │ │
+│ │ gulong modified_id    │ │
+│ └───────────────────────┘ │
+└───────────────────────────┘
+```
+
+Problem: `new_edit_doc()` allocates `sizeof(EditDOC)`, but `EditDOCX` needs its own size. Solution (same as `edit_init`): a **protected initializer** that fills already-allocated memory.
+
+### `include/edit_subclass/editDOC.h` — before `new_edit_doc`
+
+```c
+/* protected: subclasses of EditDOC (e.g. EditDOCX) call it on their memory */
+void edit_doc_init(EditDOC *doc);
+```
+
+### `src/edit_subclass/editDOC.c` — constructor split in two
+
+```c
+/* protected: fills an EditDOC that the caller already allocated */
+void edit_doc_init(EditDOC *doc) {
+    edit_init(&doc->base);
+    doc->base.open = _doc_open;
+    doc->base.save = _doc_save;
+    doc->base.render = _doc_render;
+    doc->base.finalize = _doc_finalize;
+
+    doc->buffer = gtk_text_buffer_new(NULL);
+    doc->modified_id = g_signal_connect(doc->buffer, "modified-changed",
+                                        G_CALLBACK(_doc_on_modified_changed), doc);
+}
+
+/* constructor */
+Edit *new_edit_doc(void) {
+    EditDOC *doc = calloc(1, sizeof(EditDOC));  /* zeroed: every pointer NULL */
+    if (doc == NULL) return NULL;
+
+    edit_doc_init(doc);
+    return &doc->base;   /* upcast */
+}
+```
+
+## 5. Weak pointer for `Edit.widget`
+
+When the window closes, GTK destroys every widget, including the editor's `GtkScrolledWindow`; `edit->widget` would then dangle and `_edit_close` would call `gtk_widget_get_parent()` on freed memory. `g_object_add_weak_pointer` makes GObject set the pointer to `NULL` when the object dies.
+
+In `_doc_render`, after `self->widget = scroll;`:
+
+```c
+    /* GTK sets self->widget to NULL by itself if the widget is destroyed
+     * (e.g. the window closes) before close() runs */
+    g_object_add_weak_pointer(G_OBJECT(scroll), (gpointer *)&self->widget);
+```
+
+In `_edit_close` (`src/edit.c`), first line inside `if (self->widget != NULL) {`:
+
+```c
+        g_object_remove_weak_pointer(G_OBJECT(self->widget), (gpointer *)&self->widget);
+```
+
+It must be removed before `free(self)`, otherwise GObject would later write `NULL` into freed memory.
+
+## 6. `include/edit_subclass/editDOCX.h`
+
+```c
+/**
+ * Developer: cristalmirror
+ * Repository: https://github.com/cristalmirror/StudyStudio
+ * Version: 0.1.0
+ * License: GPLv3
+ * Last edited: 2026-10-11
+ */
+
+/*
+ * Word .docx editor (text only). Inherits from EditDOC: reuses its
+ * GtkTextBuffer, render and finalize, and only replaces open/save.
+ * Saving rewrites the paragraphs as plain text: formatting is lost.
+ */
+#ifndef EDIT_DOCX_H
+#define EDIT_DOCX_H
+
+#include "editDOC.h"
+
+typedef struct {
+    EditDOC doc;   /* must be the first member: Edit -> EditDOC -> EditDOCX */
+} EditDOCX;
+
+Edit *new_edit_docx(void);
+
+#endif
+```
+
+## 7. `src/edit_subclass/editDOCX.c`
+
+Structure of `word/document.xml`:
+
+```
+<w:body> <w:p> <w:r> <w:t>text</w:t> </w:r> </w:p> ... <w:sectPr/> </w:body>
+         paragraph  run (piece with one format)        page setup (must stay last)
+```
+
+```c
+/**
+ * Developer: cristalmirror
+ * Repository: https://github.com/cristalmirror/StudyStudio
+ * Version: 0.1.0
+ * License: GPLv3
+ * Last edited: 2026-10-11
+ */
+
+/*
+ * EditDOCX: open/save of .docx files.
+ * A .docx is a ZIP; the text lives in word/document.xml as
+ *   <w:body> <w:p> <w:r> <w:t>text</w:t> </w:r> </w:p> ... <w:sectPr/> </w:body>
+ * libarchive reads/writes the ZIP and libxml2 parses the XML.
+ */
+#include <stdlib.h>
+#include <string.h>
+#include <archive.h>
+#include <archive_entry.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <glib/gstdio.h>
+#include "../../include/edit_subclass/editDOCX.h"
+
+#define DOCX_BODY_XML "word/document.xml"
+#define DOCX_W_NS     "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+/* true if node is the element <w:name> of the WordprocessingML namespace */
+static bool _docx_is_w(xmlNode *node, const char *name) {
+    return node->type == XML_ELEMENT_NODE && node->ns != NULL &&
+           xmlStrcmp(node->ns->href, BAD_CAST DOCX_W_NS) == 0 &&
+           xmlStrcmp(node->name, BAD_CAST name) == 0;
+}
+
+/* reads the data of the current archive entry; NULL on error */
+static GByteArray *_docx_read_data(struct archive *a) {
+    GByteArray *bytes = g_byte_array_new();
+    char chunk[16384];
+    la_ssize_t n;
+
+    while ((n = archive_read_data(a, chunk, sizeof(chunk))) > 0) {
+        g_byte_array_append(bytes, (const guint8 *)chunk, (guint)n);
+    }
+    if (n < 0) {
+        g_byte_array_free(bytes, TRUE);
+        return NULL;
+    }
+    return bytes;
+}
+
+/* returns a NUL-terminated copy of one entry of the zip (free with g_free) */
+static char *_docx_read_entry(const char *zip_path, const char *name, size_t *out_len) {
+    struct archive *a = archive_read_new();
+    struct archive_entry *entry;
+    char *data = NULL;
+
+    archive_read_support_format_zip(a);
+    if (archive_read_open_filename(a, zip_path, 10240) != ARCHIVE_OK) {
+        g_printerr("EditDOCX: %s: %s\n", zip_path, archive_error_string(a));
+        archive_read_free(a);
+        return NULL;
+    }
+    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+        if (strcmp(archive_entry_pathname(entry), name) != 0) {
+            archive_read_data_skip(a);
+            continue;
+        }
+        GByteArray *bytes = _docx_read_data(a);
+        if (bytes != NULL) {
+            *out_len = bytes->len;
+            g_byte_array_append(bytes, (const guint8 *)"", 1);   /* NUL */
+            data = (char *)g_byte_array_free(bytes, FALSE);
+        }
+        break;
+    }
+    archive_read_free(a);
+    return data;
+}
+
+/* parses word/document.xml of the zip; NULL if it is not a valid .docx */
+static xmlDoc *_docx_load_xml(const char *zip_path, xmlNode **body_out) {
+    size_t len = 0;
+    char *text = _docx_read_entry(zip_path, DOCX_BODY_XML, &len);
+    if (text == NULL || len > G_MAXINT) {
+        g_printerr("EditDOCX: %s has no %s\n", zip_path, DOCX_BODY_XML);
+        g_free(text);
+        return NULL;
+    }
+    xmlDoc *xml = xmlReadMemory(text, (int)len, DOCX_BODY_XML, NULL, XML_PARSE_NONET);
+    g_free(text);
+    if (xml == NULL) return NULL;
+
+    /* <w:document> -> <w:body> */
+    xmlNode *root = xmlDocGetRootElement(xml);
+    if (root != NULL && _docx_is_w(root, "document")) {
+        for (xmlNode *n = root->children; n != NULL; n = n->next) {
+            if (_docx_is_w(n, "body")) {
+                *body_out = n;
+                return xml;
+            }
+        }
+    }
+    g_printerr("EditDOCX: %s has no <w:body>\n", zip_path);
+    xmlFreeDoc(xml);
+    return NULL;
+}
+
+/* walks the XML tree: one line per <w:p>, also inside tables */
+static void _docx_collect_text(xmlNode *node, GString *out) {
+    for (xmlNode *n = node; n != NULL; n = n->next) {
+        if (_docx_is_w(n, "pPr") || _docx_is_w(n, "rPr")) {
+            continue;   /* properties: their <w:tab> are tab stops, not text */
+        } else if (_docx_is_w(n, "t")) {
+            xmlChar *t = xmlNodeGetContent(n);
+            g_string_append(out, (const char *)t);
+            xmlFree(t);
+        } else if (_docx_is_w(n, "tab")) {
+            g_string_append_c(out, '\t');
+        } else if (_docx_is_w(n, "br") || _docx_is_w(n, "cr")) {
+            g_string_append_c(out, '\n');
+        } else {
+            _docx_collect_text(n->children, out);
+            if (_docx_is_w(n, "p")) g_string_append_c(out, '\n');
+        }
+    }
+}
+
+/* replaces the content of <w:body> by one plain <w:p> per line of text */
+static void _docx_rebuild_body(xmlNode *body, const char *text) {
+    xmlNs *w = body->ns;
+    xmlNode *sect = NULL;   /* page setup: must stay as the last child */
+
+    xmlNode *n = body->children;
+    while (n != NULL) {
+        xmlNode *next = n->next;   /* save it: n is freed below */
+        if (_docx_is_w(n, "sectPr")) {
+            sect = n;
+        } else {
+            xmlUnlinkNode(n);
+            xmlFreeNode(n);
+        }
+        n = next;
+    }
+
+    char **lines = g_strsplit(text, "\n", -1);
+    for (int i = 0; lines[i] != NULL; i++) {
+        xmlNode *p = xmlNewNode(w, BAD_CAST "p");
+        xmlNode *r = xmlNewChild(p, w, BAD_CAST "r", NULL);
+
+        /* "a\tb" -> <w:t>a</w:t><w:tab/><w:t>b</w:t> */
+        char **parts = g_strsplit(lines[i], "\t", -1);
+        for (int j = 0; parts[j] != NULL; j++) {
+            if (j > 0) xmlNewChild(r, w, BAD_CAST "tab", NULL);
+            if (parts[j][0] != '\0') {
+                /* xmlNewTextChild escapes &, < and > */
+                xmlNode *t = xmlNewTextChild(r, w, BAD_CAST "t", BAD_CAST parts[j]);
+                xmlNodeSetSpacePreserve(t, 1);   /* keep leading/trailing spaces */
+            }
+        }
+        g_strfreev(parts);
+
+        if (sect != NULL) xmlAddPrevSibling(sect, p);
+        else xmlAddChild(body, p);
+    }
+    g_strfreev(lines);
+}
+
+/* copies the zip to path.tmp replacing one entry, then renames it over path */
+static int _docx_write_zip(const char *path, const char *replace_name,
+                           const void *data, size_t len) {
+    char *tmp = g_strconcat(path, ".tmp", NULL);
+    struct archive *in = archive_read_new();
+    struct archive *out = archive_write_new();
+    struct archive_entry *entry;
+    int rc = 0;
+
+    archive_read_support_format_zip(in);
+    archive_write_set_format_zip(out);
+
+    if (archive_read_open_filename(in, path, 10240) != ARCHIVE_OK ||
+        archive_write_open_filename(out, tmp) != ARCHIVE_OK) {
+        rc = -1;
+    }
+
+    int r = ARCHIVE_EOF;
+    while (rc == 0 && (r = archive_read_next_header(in, &entry)) == ARCHIVE_OK) {
+        GByteArray *bytes = _docx_read_data(in);
+        if (bytes == NULL) {
+            rc = -2;
+            break;
+        }
+        const void *buf = bytes->data;
+        size_t size = bytes->len;
+        if (strcmp(archive_entry_pathname(entry), replace_name) == 0) {
+            buf = data;   /* the new document.xml */
+            size = len;
+        }
+
+        struct archive_entry *copy = archive_entry_clone(entry);
+        archive_entry_set_size(copy, (la_int64_t)size);
+        if (archive_write_header(out, copy) != ARCHIVE_OK ||
+            (size > 0 && archive_write_data(out, buf, size) != (la_ssize_t)size)) {
+            rc = -3;
+        }
+        archive_entry_free(copy);
+        g_byte_array_free(bytes, TRUE);
+    }
+    if (rc == 0 && r != ARCHIVE_EOF) rc = -2;   /* broken input zip */
+
+    if (rc != 0) {
+        g_printerr("EditDOCX: cannot save %s: %s\n", path,
+                   archive_error_string(rc == -3 ? out : in));
+    }
+    archive_read_free(in);
+    if (archive_write_close(out) != ARCHIVE_OK && rc == 0) rc = -3;
+    archive_write_free(out);
+
+    if (rc == 0) {
+        /* replace the original only now that the copy is complete */
+        GFile *src = g_file_new_for_path(tmp);
+        GFile *dst = g_file_new_for_path(path);
+        GError *error = NULL;
+        if (!g_file_move(src, dst, G_FILE_COPY_OVERWRITE, NULL, NULL, NULL, &error)) {
+            g_printerr("EditDOCX: cannot replace %s: %s\n", path, error->message);
+            g_clear_error(&error);
+            rc = -4;
+        }
+        g_object_unref(src);
+        g_object_unref(dst);
+    }
+    if (rc != 0) g_remove(tmp);
+    g_free(tmp);
+    return rc;
+}
+
+static int _docx_open(Edit *self, const char *path) {
+    EditDOC *doc = (EditDOC *)self;   /* downcast to the parent class */
+    xmlNode *body = NULL;
+
+    xmlDoc *xml = _docx_load_xml(path, &body);
+    if (xml == NULL) return -1;
+
+    GString *text = g_string_new(NULL);
+    _docx_collect_text(body->children, text);
+    xmlFreeDoc(xml);
+
+    /* the last <w:p> also added a '\n': drop it, or every save adds a paragraph */
+    if (text->len > 0 && text->str[text->len - 1] == '\n') {
+        g_string_truncate(text, text->len - 1);
+    }
+    if (text->len > G_MAXINT) {
+        g_string_free(text, TRUE);
+        return -2;
+    }
+    gtk_text_buffer_set_text(doc->buffer, text->str, (int)text->len);
+    g_string_free(text, TRUE);
+
+    gtk_text_buffer_set_modified(doc->buffer, FALSE);
+    self->set_path(self, path);
+    return 0;
+}
+
+static int _docx_save(Edit *self) {
+    EditDOC *doc = (EditDOC *)self;
+    xmlNode *body = NULL;
+    GtkTextIter start, end;
+
+    if (self->path == NULL) return -1;
+
+    /* re-read the original document.xml to keep its namespaces and <w:sectPr> */
+    xmlDoc *xml = _docx_load_xml(self->path, &body);
+    if (xml == NULL) return -1;
+
+    gtk_text_buffer_get_bounds(doc->buffer, &start, &end);
+    char *text = gtk_text_buffer_get_text(doc->buffer, &start, &end, FALSE);
+    _docx_rebuild_body(body, text);
+    g_free(text);
+
+    xmlChar *out = NULL;
+    int out_len = 0;
+    xmlDocDumpMemoryEnc(xml, &out, &out_len, "UTF-8");
+    xmlFreeDoc(xml);
+    if (out == NULL) return -1;
+
+    int rc = _docx_write_zip(self->path, DOCX_BODY_XML, out, (size_t)out_len);
+    xmlFree(out);
+
+    if (rc == 0) gtk_text_buffer_set_modified(doc->buffer, FALSE);
+    return rc;
+}
+
+/* constructor: build an EditDOC, then override what changes */
+Edit *new_edit_docx(void) {
+    EditDOCX *docx = calloc(1, sizeof(EditDOCX));
+    if (docx == NULL) return NULL;
+
+    edit_doc_init(&docx->doc);          /* buffer, render, finalize from EditDOC */
+    docx->doc.base.open = _docx_open;   /* override */
+    docx->doc.base.save = _docx_save;   /* override */
+    return &docx->doc.base;             /* upcast to Edit */
+}
+```
+
+Notes:
+
+- **Namespaces:** elements are matched by `ns->href` (the URL), not by the `w:` prefix, which is chosen by whoever wrote the file.
+- **`pPr` / `rPr` skipped:** inside `<w:tabs>` there are `<w:tab>` elements that are tab-stop positions, not text.
+- **Trailing `\n`:** every `<w:p>` adds a newline; the last one is dropped on open, or each save would add an empty paragraph.
+- **Save:** re-reads the original `document.xml` (keeps namespaces and `<w:sectPr>`), replaces the body, and copies every other ZIP entry (images, styles, `[Content_Types].xml`) unchanged.
+- **Atomic write:** writes `file.docx.tmp` and only then moves it over the original with `g_file_move(..., G_FILE_COPY_OVERWRITE)`; plain `rename()` fails on Windows if the target exists.
+- **Escaping:** `xmlNewTextChild` escapes `&`, `<`, `>`; `xmlNodeSetSpacePreserve` adds `xml:space="preserve"` so leading/trailing spaces survive.
+
+## 8. Factory and build flags
+
+`src/edit.c`:
+
+```c
+#include "../include/edit_subclass/editDOCX.h"
+...
+    else if (g_ascii_strcasecmp(ext, ".docx") == 0) {
+        edit = new_edit_docx();
+    }
+```
+
+`Makefile`: add `libxml-2.0` after `gtk4` in the 4 `pkgconf` lines (`GTK_CFLAGS_LINUX`, `GTK_LIBS_LINUX`, `GTK_CFLAGS_WIN`, `GTK_LIBS_WIN`), e.g.:
+
+```make
+GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4 libxml-2.0)
+```
+
+`Dockerfile`: list `libxml2-devel` and `mingw64-libxml2` explicitly (today they only arrive as GTK4 dependencies). The CI builds from the `Dockerfile`, so no workflow change is needed.
+
+## 9. `src/main.c`: drop-down editing panel per subject
+
+Each "Materia Num" becomes a vertical box:
+
+```
+panel_box
+├── [Materia Num #1]          <- click toggles the revealer
+└── GtkRevealer (hidden)
+    └── tools
+        ├── [📄 Abrir] [💾 Guardar] [✖ Cerrar]
+        └── editor_box        <- the Edit renders here
+```
+
+```c
+#include "../include/edit.h"
+
+/*this structure save the state of application*/
+typedef struct {
+    GtkWidget *destiny_content; //save the element
+    GtkWidget *window; 
+    GtkWidget *footer_label; /* status messages */
+    int counter; //number of element(index)
+} AppState;
+
+/* one per "Materia Num" button: its drop-down editing tools */
+typedef struct {
+    AppState *state;
+    GtkWidget *revealer;     /* shows / hides the tools */
+    GtkWidget *editor_box;   /* where the open Edit renders itself */
+    Edit *edit;              /* open document, NULL if none */
+} SubjectPanel;
+```
+
+Replace `on_subject_clicked` and `on_add_clicked` with:
+
+```c
+/* writes a message in the footer */
+static void app_status(AppState *state, const char *msg) {
+    gtk_label_set_text(GTK_LABEL(state->footer_label), msg);
+}
+
+/* subject button: unfold / fold its editing tools */
+static void on_subject_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+    GtkRevealer *revealer = GTK_REVEALER(panel->revealer);
+    gtk_revealer_set_reveal_child(revealer, !gtk_revealer_get_reveal_child(revealer));
+}
+
+/* the file dialog finished: open the document inside the panel */
+static void on_open_doc_finish(GObject *source, GAsyncResult *res, gpointer user_data) {
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+    GError *error = NULL;
+
+    GFile *file = gtk_file_dialog_open_finish(GTK_FILE_DIALOG(source), res, &error);
+    if (file == NULL) {
+        g_clear_error(&error);   /* cancelled */
+        return;
+    }
+    char *path = g_file_get_path(file);
+    g_object_unref(file);
+
+    Edit *edit = new_edit_for_path(path);   /* picks EditDOCX, EditDOC... */
+    if (edit == NULL) {
+        app_status(panel->state, "Cannot open the document");
+    } else {
+        edit->render(edit, panel->editor_box);
+        panel->edit = edit;
+        app_status(panel->state, path);
+    }
+    g_free(path);
+}
+
+static void on_open_doc_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+
+    if (panel->edit != NULL) {
+        app_status(panel->state, "Close the current document first");
+        return;
+    }
+
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Documents (.docx, .txt, .md)");
+    gtk_file_filter_add_suffix(filter, "docx");
+    gtk_file_filter_add_suffix(filter, "txt");
+    gtk_file_filter_add_suffix(filter, "md");
+
+    GtkFileDialog *dialog = gtk_file_dialog_new();
+    gtk_file_dialog_set_title(dialog, "Abrir documento");
+    gtk_file_dialog_set_default_filter(dialog, filter);
+    gtk_file_dialog_open(dialog, GTK_WINDOW(panel->state->window), NULL,
+                         on_open_doc_finish, panel);
+    g_object_unref(filter);
+    g_object_unref(dialog);
+}
+
+static void on_save_doc_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+
+    if (panel->edit == NULL) return;
+    if (panel->edit->save(panel->edit) == 0) {
+        app_status(panel->state, "Document saved");
+    } else {
+        app_status(panel->state, "Error saving the document");
+    }
+}
+
+static void on_close_doc_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+
+    if (panel->edit == NULL) return;
+    if (panel->edit->is_modified(panel->edit)) {
+        app_status(panel->state, "Unsaved changes: save before closing");
+        return;
+    }
+    panel->edit->close(panel->edit);   /* removes its widget and frees it */
+    panel->edit = NULL;
+    app_status(panel->state, "Document closed");
+}
+
+/* runs when the panel's box is finalized (e.g. the window closes) */
+static void subject_panel_free(gpointer data) {
+    SubjectPanel *panel = (SubjectPanel *)data;
+    if (panel->edit != NULL) panel->edit->close(panel->edit);
+    g_free(panel);
+}
+
+/* helper: a button connected to a SubjectPanel callback */
+static GtkWidget *panel_button(const char *label, GCallback cb, SubjectPanel *panel) {
+    GtkWidget *button = gtk_button_new_with_label(label);
+    g_signal_connect(button, "clicked", cb, panel);
+    return button;
+}
+
+/*
+  this function is a callback that is executed
+  when you press 'Add' button.
+*/
+static void on_add_clicked(GtkButton *button, gpointer user_data) {
+    (void)button;
+    // search our state in usaer_data
+    AppState *state = (AppState *)user_data;
+    state->counter++;
+
+    SubjectPanel *panel = g_new0(SubjectPanel, 1);
+    panel->state = state;
+
+    /* toolbar: open / save / close */
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_box_append(GTK_BOX(toolbar), panel_button("📄 Abrir", G_CALLBACK(on_open_doc_clicked), panel));
+    gtk_box_append(GTK_BOX(toolbar), panel_button("💾 Guardar", G_CALLBACK(on_save_doc_clicked), panel));
+    gtk_box_append(GTK_BOX(toolbar), panel_button("✖ Cerrar", G_CALLBACK(on_close_doc_clicked), panel));
+
+    /* the Edit appends its own widget here; fixed height because we are
+     * already inside a GtkScrolledWindow */
+    panel->editor_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(panel->editor_box, -1, 300);
+
+    GtkWidget *tools = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(GTK_BOX(tools), toolbar);
+    gtk_box_append(GTK_BOX(tools), panel->editor_box);
+
+    panel->revealer = gtk_revealer_new();
+    gtk_revealer_set_transition_type(GTK_REVEALER(panel->revealer),
+                                     GTK_REVEALER_TRANSITION_TYPE_SLIDE_DOWN);
+    gtk_revealer_set_child(GTK_REVEALER(panel->revealer), tools);
+
+    // Make the new element: the subject button + its hidden tools
+    char *text_label = g_strdup_printf("Materia Num #%d", state->counter);
+    GtkWidget *new_subject = gtk_button_new_with_label(text_label);
+    g_signal_connect(new_subject, "clicked", G_CALLBACK(on_subject_clicked), panel);
+    g_free(text_label);
+
+    GtkWidget *panel_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_append(GTK_BOX(panel_box), new_subject);
+    gtk_box_append(GTK_BOX(panel_box), panel->revealer);
+    /* the panel lives as long as its box: GTK frees it for us */
+    g_object_set_data_full(G_OBJECT(panel_box), "panel", panel, subject_panel_free);
+
+    // add the element to the destiny box
+    gtk_box_append(GTK_BOX(state->destiny_content), panel_box);
+}
+```
+
+And in `activate()`, right after fetching `footer_label`:
+
+```c
+    state->footer_label = footer_label;
+```
+
+GTK concepts:
+
+- **`GtkRevealer`:** single-child container that shows/hides it with an animation (`SLIDE_DOWN`); this is the "drop-down".
+- **One `SubjectPanel` per button:** each subject has its own state (which document is open), so `panel` — not the global `AppState` — is the `user_data`.
+- **`g_object_set_data_full`:** ties the panel's lifetime to `panel_box`; when GTK finalizes the box (window closed) it calls `subject_panel_free`. By then `edit->widget` is already `NULL` thanks to the weak pointer (section 5), so `close` does not touch dead memory.
+- **`gtk_widget_set_size_request(editor_box, -1, 300)`:** the editor's `GtkScrolledWindow` lives inside another one (`scrolled_window`); without a fixed height it gets its minimum height (~0) and is invisible.
+- **Closing with unsaved changes** is refused with a footer message; a future `GtkAlertDialog` (Save / Discard / Cancel) would be nicer.
+
+## 10. Verification
+
+Headless harness linked against `edit.o` and `edit_subclass/*.o`, with a generated `.docx` containing bold text, a `<w:tabs>` tab stop, `&`, `ñ`, a `<w:tab/>`, a table, an empty paragraph, `<w:sectPr>` and a 25 600-byte binary entry:
+
+```
+--- read ---
+[Hola mundo & ñandú
+col1	col2
+celda
+]
+after insert modified=1
+save rc=0 modified=0
+--- reread ---
+[Hola mundo & ñandú
+col1	col2
+celda
+
+linea nueva <x> & "y"]
+```
+
+The saved ZIP passed `zipfile.testzip()`, the binary entry was byte-identical and `<w:sectPr>` stayed as the last child of `<w:body>`.
+
+> [!NOTE]
+> A first run printed `save rc=0 modified=1`: the test did `printf("...", e->save(e), e->is_modified(e))`, and **the evaluation order of function arguments is unspecified in C**, so `is_modified` ran before `save`. Sequencing the calls (`int rc = e->save(e);` first) gave `modified=0`. The bug was in the test, not in `EditDOCX`.
+
+## 11. Status and next steps (0.1.0)
+
+- [x] Write `include/edit.h` and `src/edit.c` (base class, `edit_init`, `new_edit_for_path`).
+- [x] Write `include/edit_subclass/editDOC.h` and `src/edit_subclass/editDOC.c`.
+- [x] `Makefile`: include `src/edit_subclass/*.c` and add `@mkdir -p $(@D)` to the 4 object rules.
+- [ ] `editDOC.h` / `editDOC.c`: standard header, remove blank first line, trailing newline.
+- [ ] `edit_doc_init` + weak pointer in `editDOC.c` / `edit.c` (sections 4–5).
+- [ ] Write `editDOCX.h` / `editDOCX.c` and add `.docx` to the factory.
+- [ ] `Makefile`: `libxml-2.0` in the 4 `pkgconf` lines; `Dockerfile`: `libxml2-devel`, `mingw64-libxml2`.
+- [ ] `main.c`: `SubjectPanel`, `GtkRevealer` toolbar, `footer_label` in `AppState`; test the GUI by hand on Linux and Windows.
+- [ ] `interface.ui`: raise `default-width` / `default-height` (e.g. 700×600) so the editor fits.
+- [ ] `Makefile`: fix `HEADERS` / add `-MMD -MP` dependency tracking.
+- [ ] Optional: `GtkAlertDialog` for closing with unsaved changes.
+- [ ] Move `EditPDF` out of `edit.h` into `editPDF.h`; decide the scope of `EditPDF` / `EditUML`.
+- [ ] Align `docs/class_diagram.md` with the final class names (`EditDOC`, `EditDOCX`, ...).
+- [ ] Bump to 0.1.0 when released: `Makefile` (`NAME`), headers, `README.md`, `CHANGELOG.md`.
