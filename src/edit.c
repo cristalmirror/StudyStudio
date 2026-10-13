@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.0
+ * Version: 0.1.1
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-13
  */
 /*
  * Common operations of the Edit hierarchy and the factory that
@@ -14,6 +14,15 @@
 #include "../include/edit.h"
 #include "../include/edit_subclass/editTXT.h"
 #include "../include/edit_subclass/editDOC.h"
+
+const EditKind edit_kinds[] = {
+    { "📝 Texto (.txt, .md)", "Texto", edit_txt_suffixes, new_edit_txt, NULL },
+    { "📄 Documento (.docx, .odt, .xlsx, .pptx...)", "Documentos de oficina",
+      edit_doc_suffixes, new_edit_doc, edit_doc_available },
+    { "📕 PDF (próximamente)", NULL, NULL, NULL, NULL },
+    { "📐 UML (próximamente)", NULL, NULL, NULL, NULL },
+};
+const size_t edit_kinds_count = G_N_ELEMENTS(edit_kinds);
 
 /* destructor: shared by every subclass */
 static void _edit_close(Edit *self) {

@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.0
+ * Version: 0.1.1
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-13
  */
 
 /*
@@ -39,6 +39,19 @@ struct Edit {
     void (*set_widget)(Edit *self, GtkWidget *widget);
 
 };
+
+/* describes one Edit subclass: used by menus and by the factory */
+typedef struct {
+    const char *label;              /* menu entry */
+    const char *filter_name;        /* name shown in the file dialog */
+    const char *const *suffixes;    /* NULL: editor not implemented yet */
+    Edit *(*create)(void);          /* subclass constructor */
+    bool (*available)(void);        /* NULL: always available */
+} EditKind;
+
+/* every editor kind, defined in edit.c */
+extern const EditKind edit_kinds[];
+extern const size_t edit_kinds_count;
 
 /* protected: only subclass constructors call it */
 void edit_init(Edit *self);

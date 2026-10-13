@@ -38,8 +38,8 @@ LDFLAGS_WIN_DEBUG := $(GTK_LIBS_WIN) -larchive -llzma -static-libgcc
 # ==========================================
 # Source files
 # ==========================================
-SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c)
-HEADERS := $(wildcard $(INCLUDE_DIR)/.h)
+SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c) $(wildcard $(SRC_DIR)/msc/*.c)
+HEADERS := $(wildcard $(INCLUDE_DIR)/*.h)
 
 OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
 OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o) $(BUILD_DIR)/win64/resources.o

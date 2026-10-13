@@ -1,16 +1,15 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.0
+ * Version: 0.1.1
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-13
  */
 
 #include <gtk/gtk.h>
 #include "../include/subject.h"
 #include "../include/edit.h"
-#include "../include/edit_subclass/editTXT.h"
-#include "../include/edit_subclass/editDOC.h"
+#include "../include/msc/menuEditKind.h"
 
 /*this structure save the state of application*/
 typedef struct {
@@ -20,30 +19,13 @@ typedef struct {
     int counter; //number of element(index)
 } AppState;
 
-/* one entry of the subject's "what do you want to edit?" menu */
-typedef struct {
-    const char *label;              /* menu entry */
-    const char *filter_name;        /* name shown in the file dialog */
-    const char *const *suffixes;    /* NULL: editor not implemented yet */
-    Edit *(*create)(void);          /* subclass constructor */
-    bool (*available)(void);        /* NULL: always available */
-} EditorKind;
-
-static const EditorKind s_editor_kinds[] = {
-    { "📝 Texto (.txt, .md)", "Texto", edit_txt_suffixes, new_edit_txt, NULL },
-    { "📄 Documento (.docx, .odt, .xlsx, .pptx...)", "Documentos de oficina",
-      edit_doc_suffixes, new_edit_doc, edit_doc_available },
-    { "📕 PDF (próximamente)", NULL, NULL, NULL, NULL },
-    { "📐 UML (próximamente)", NULL, NULL, NULL, NULL },
-};
-
 /* one per "Materia Num" button: its menu and its editing area */
 typedef struct {
     AppState *state;
     GtkWidget *menu_button;        /* the subject button, opens the menu */
     GtkWidget *revealer;           /* shows / hides the editing area */
     GtkWidget *editor_box;         /* where the open Edit renders itself */
-    const EditorKind *kind;        /* kind chosen in the menu */
+    const EditKind *kind;          /* kind chosen in the menu */
     Edit *edit;                    /* open document, NULL if none */
 } SubjectPanel;
 
@@ -83,11 +65,8 @@ static void on_open_doc_finish(GObject *source, GAsyncResult *res, gpointer user
 }
 
 /* an entry of the subject menu: ask for a file of that kind */
-static void on_kind_clicked(GtkButton *button, gpointer user_data) {
+static void on_kind_chosen(const EditKind *kind, gpointer user_data) {
     SubjectPanel *panel = (SubjectPanel *)user_data;
-    const EditorKind *kind = g_object_get_data(G_OBJECT(button), "kind");
-
-    gtk_menu_button_popdown(GTK_MENU_BUTTON(panel->menu_button));
 
     if (panel->edit != NULL) {
         app_status(panel->state, "Close the current document first");
@@ -155,24 +134,6 @@ static GtkWidget *panel_button(const char *label, GCallback cb, SubjectPanel *pa
     return button;
 }
 
-/* the popover with one entry per editor kind */
-static GtkWidget *subject_menu_new(SubjectPanel *panel) {
-    GtkWidget *list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-
-    for (size_t i = 0; i < G_N_ELEMENTS(s_editor_kinds); i++) {
-        const EditorKind *kind = &s_editor_kinds[i];
-        GtkWidget *item = panel_button(kind->label, G_CALLBACK(on_kind_clicked), panel);
-        gtk_button_set_has_frame(GTK_BUTTON(item), FALSE);       /* looks like a menu entry */
-        gtk_widget_set_sensitive(item, kind->suffixes != NULL);  /* greyed: not ready yet */
-        g_object_set_data(G_OBJECT(item), "kind", (gpointer)kind);
-        gtk_box_append(GTK_BOX(list), item);
-    }
-
-    GtkWidget *popover = gtk_popover_new();
-    gtk_popover_set_child(GTK_POPOVER(popover), list);
-    return popover;
-}
-
 /*
   this function is a callback that is executed
   when you press 'Add' button.
@@ -190,7 +151,8 @@ static void on_add_clicked(GtkButton *button, gpointer user_data) {
     char *text_label = g_strdup_printf("Materia Num #%d", state->counter);
     panel->menu_button = gtk_menu_button_new();
     gtk_menu_button_set_label(GTK_MENU_BUTTON(panel->menu_button), text_label);
-    gtk_menu_button_set_popover(GTK_MENU_BUTTON(panel->menu_button), subject_menu_new(panel));
+    Menu *menu = new_menu_edit_kind(on_kind_chosen, panel);
+    gtk_menu_button_set_popover(GTK_MENU_BUTTON(panel->menu_button), menu->popover);
     g_free(text_label);
 
     /* toolbar of the open document */
