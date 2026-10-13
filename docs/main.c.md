@@ -1,24 +1,22 @@
 # `src/main.c`
 
-Status: draft for user approval; version 0.1.0.
+Status: draft for user approval; version 0.1.1.
 
 ## Purpose and dependencies
 
-Starts the GTK4 application, loads the embedded interface, and connects UI events. Depends on GTK4/GLib, `include/subject.h`, the `Edit` hierarchy (`include/edit.h`, `editTXT.h`, `editDOC.h`), and the resource path `/org/studystudio/interface.ui`. The file now opens with a standard header comment (developer, repository, version, license, edit date).
+Starts the GTK4 application, loads the embedded interface, and connects UI events. Depends on GTK4/GLib, `include/subject.h`, the `Edit` hierarchy (`include/edit.h`, for `Edit` and `EditKind`), the subject menu (`include/msc/menuEditKind.h`, which brings in the `Menu` base class from `include/menu.h`), and the resource path `/org/studystudio/interface.ui`. The file now opens with a standard header comment (developer, repository, version, license, edit date).
 
 ## Current behavior
 
 | Element | Responsibility |
 | --- | --- |
 | `AppState` | Holds the destination widget (`destiny_content`), the parent window (`window`), the footer label (`footer_label`, used by `app_status`), and the counter for added subjects. |
-| `EditorKind` / `s_editor_kinds` | Static table with one row per entry of the subject menu: label, file-dialog filter name, suffix list (`edit_txt_suffixes`, `edit_doc_suffixes`), constructor (`new_edit_txt`, `new_edit_doc`) and an optional availability check (`edit_doc_available`). PDF and UML rows have `suffixes == NULL`: they are shown greyed out as "(próximamente)". Adding an editor means adding a row. |
-| `SubjectPanel` | One per subject: its `GtkMenuButton`, the `GtkRevealer` with the editing area, the `editor_box` where the `Edit` renders, the chosen `EditorKind` and the open `Edit` (`NULL` if none). Owned by the subject's box through `g_object_set_data_full`; freed by `subject_panel_free`, which also closes the open `Edit`. |
+| `SubjectPanel` | One per subject: its `GtkMenuButton`, the `GtkRevealer` with the editing area, the `editor_box` where the `Edit` renders, the chosen `EditKind` (see [edit.c](edit.c.md#editor-kinds)) and the open `Edit` (`NULL` if none). Owned by the subject's box through `g_object_set_data_full`; freed by `subject_panel_free`, which also closes the open `Edit`. |
 | `main` | Creates application `org.ejemplo.app`, connects activation, runs the event loop, and releases the application. |
 | `activate` | Loads the builder resource, retrieves widgets, associates the window with the application, allocates state, connects signals, presents the window, fetches `footer_label` and registers it with `subject_set_logger(on_subject_log, footer_label)`, and finally releases the builder. |
 | `on_subject_log` | Logger callback registered with `subject_set_logger`. Copies the message, strips the trailing newline with `g_strchomp`, and sets it as the text of `footer_label`. |
-| `on_add_clicked` | Increments the counter and appends a subject panel: a `GtkMenuButton` labeled `Materia Num #N` whose popover (`subject_menu_new`) lists the editor kinds, and a hidden `GtkRevealer` (slide down) with a `💾 Guardar` / `✖ Cerrar` toolbar and a 500 px high `editor_box`. |
-| `subject_menu_new` | Builds the popover: one frameless button per `s_editor_kinds` row, insensitive when the row has no suffixes, with the row pointer stored as object data `"kind"`. |
-| `on_kind_clicked` | Closes the popover. Refuses if the panel already has a document open, or if the kind's `available()` returns `false` (LibreOffice missing). Otherwise remembers the kind and opens a `GtkFileDialog` filtered to the kind's suffixes. |
+| `on_add_clicked` | Increments the counter and appends a subject panel: a `GtkMenuButton` labeled `Materia Num #N` whose popover comes from `new_menu_edit_kind(on_kind_chosen, panel)` (`menu->popover`, see [menu.c](menu.c.md)) and lists the editor kinds, and a hidden `GtkRevealer` (slide down) with a `💾 Guardar` / `✖ Cerrar` toolbar and a 500 px high `editor_box`. |
+| `on_kind_chosen` | `MenuEditKindChosen` callback: receives the chosen `const EditKind *` and the panel as `user_data` (the `Menu` base already closed the popover). Refuses if the panel already has a document open, or if the kind's `available()` returns `false` (LibreOffice missing). Otherwise remembers the kind and opens a `GtkFileDialog` filtered to the kind's suffixes. |
 | `on_open_doc_finish` | Creates the editor with `kind->create()`, calls `open(path)`; on success renders it into `editor_box`, reveals the panel and shows the path in the footer; on failure closes the editor and reports the error. A cancelled dialog does nothing. |
 | `on_save_doc_clicked` | Calls `edit->save()` and reports the result in the footer. |
 | `on_close_doc_clicked` | Refuses when `edit->is_modified()`; otherwise `edit->close()` (removes the widget and frees the editor) and hides the revealer. |
@@ -32,7 +30,7 @@ The footer lookup must happen before `g_object_unref(builder)`: `gtk_builder_get
 
 ## Ownership and limitations
 
-Temporary label strings are freed after widget creation. The builder and application references are released. In `on_load_dialog_finish`, the temporary subject is destroyed after use, its decoded buffer is freed once printed, the path string and the `GFile` are released when a file was chosen, and the `GError` is cleared when it was not. The dialog reference is released in `on_load_clicked`, right after starting it. `AppState` is allocated with `g_new0` (all fields zeroed) and `activate` sets `window`, `destiny_content`, `footer_label`, and `counter`; no cleanup is registered. Each `SubjectPanel` is tied to its subject box with `g_object_set_data_full`, so GTK frees it (and closes its `Edit`) when the window is destroyed. By then the editor's widget may already be gone; `Edit.widget` is a weak pointer (`set_widget`), so `close()` does not touch it. Builder objects are used without explicit checks for missing IDs.
+Temporary label strings are freed after widget creation. The builder and application references are released. In `on_load_dialog_finish`, the temporary subject is destroyed after use, its decoded buffer is freed once printed, the path string and the `GFile` are released when a file was chosen, and the `GError` is cleared when it was not. The dialog reference is released in `on_load_clicked`, right after starting it. `AppState` is allocated with `g_new0` (all fields zeroed) and `activate` sets `window`, `destiny_content`, `footer_label`, and `counter`; no cleanup is registered. Each `SubjectPanel` is tied to its subject box with `g_object_set_data_full`, so GTK frees it (and closes its `Edit`) when the window is destroyed. The subject menu is tied to its popover the same way, so `main.c` never frees it. By then the editor's widget may already be gone; `Edit.widget` is a weak pointer (`set_widget`), so `close()` does not touch it. Builder objects are used without explicit checks for missing IDs.
 
 The logger registered with `subject_set_logger(on_subject_log, footer_label)` is never unregistered. `subject.c` keeps a raw pointer to `footer_label`, so if the window is destroyed while the application keeps running, a later `subject_log` call would use a dangling widget. This is harmless today because the application exits with its only window, but a cleanup step (for example, calling `subject_set_logger(NULL, NULL)` from the window's `destroy` signal) should be added together with the `AppState` cleanup.
 

@@ -1,21 +1,22 @@
 # Class diagram
 
-Status: draft for user approval; version 0.1.0.
+Status: draft for user approval; version 0.1.1.
 
 > [!NOTE]
 > `Edit`, `EditTXT` and `EditDOC` are implemented in `src/edit.c` and
 > `src/edit_subclass/`. `EditPDF`, `EditUML` and `EditCode` are still
 > `<<planned>>`: `include/edit_subclass/editPDF.h` and `editUML.h` exist but
 > are empty. `main.c` creates editors from the per-subject menu
-> (`SubjectPanel`, `EditorKind`).
+> (`SubjectPanel`, `MenuEditKind`, `EditKind`). `Menu` and `MenuEditKind` are
+> implemented in `src/menu.c` and `src/msc/`.
 
 StudyStudio is written in C, so it has no real classes. This diagram models the
 object-oriented patterns the code already uses: `struct Subject` with methods as
 function pointers (assigned in `new_subject()`, called as `self->method(self, ...)`),
 `new_subject()` / `close_subject()` as constructor and destructor, and
 `SubjectLogFunc` as an abstract interface that decouples `subject.c` from GTK.
-`Edit` applies the same pattern with inheritance: each subclass embeds `Edit`
-as its first member and assigns the abstract function pointers.
+`Edit` and `Menu` apply the same pattern with inheritance: each subclass embeds
+the base as its first member and assigns the abstract function pointers.
 
 ```mermaid
 classDiagram
@@ -24,8 +25,7 @@ classDiagram
     class MainGUI {
         <<module>>
         -on_add_clicked(GtkButton* button, gpointer user_data)$ void
-        -subject_menu_new(SubjectPanel* panel)$ GtkWidget*
-        -on_kind_clicked(GtkButton* button, gpointer user_data)$ void
+        -on_kind_chosen(const EditKind* kind, gpointer user_data)$ void
         -on_open_doc_finish(GObject* source, GAsyncResult* res, gpointer user_data)$ void
         -on_save_doc_clicked(GtkButton* button, gpointer user_data)$ void
         -on_close_doc_clicked(GtkButton* button, gpointer user_data)$ void
@@ -47,7 +47,7 @@ classDiagram
         +int counter
     }
 
-    class EditorKind {
+    class EditKind {
         <<struct>>
         +const char* label
         +const char* filter_name
@@ -62,7 +62,7 @@ classDiagram
         +GtkWidget* menu_button
         +GtkWidget* revealer
         +GtkWidget* editor_box
-        +const EditorKind* kind
+        +const EditKind* kind
         +Edit* edit
     }
 
@@ -149,6 +149,25 @@ classDiagram
         #finalize() void
     }
 
+    class Menu {
+        <<abstract>>
+        +GtkWidget* popover
+        +GtkWidget* list
+        #activate(gpointer item_data)* void
+        #finalize()* void
+        #add_item(const char* label, bool sensitive, gpointer item_data) GtkWidget*
+        +popdown() void
+        #menu_init(Menu* self)$ void
+    }
+
+    class MenuEditKind {
+        -Menu base
+        -MenuEditKindChosen on_chosen
+        -gpointer user_data
+        +new_menu_edit_kind(MenuEditKindChosen on_chosen, gpointer user_data)$ Menu*
+        #activate(gpointer item_data) void
+    }
+
     class LibreOfficeKit {
         <<external>>
         +documentLoad(const char* url) LibreOfficeKitDocument*
@@ -190,12 +209,15 @@ classDiagram
     MainGUI ..> Subject : new_subject() / load_subject()
     MainGUI ..|> SubjectLogFunc : on_subject_log
     MainGUI ..> SubjectPanel : creates in on_add_clicked()
-    MainGUI ..> EditorKind : s_editor_kinds[]
+    MainGUI ..> MenuEditKind : new_menu_edit_kind() in on_add_clicked()
+    Menu <|-- MenuEditKind
+    MenuEditKind ..> EditKind : one entry per edit_kinds[] row
+    MenuEditKind ..> MainGUI : on_chosen = on_kind_chosen
     SubjectPanel --> AppState : state
-    SubjectPanel --> EditorKind : kind
+    SubjectPanel --> EditKind : kind
     SubjectPanel o--> Edit : edit (0..1)
-    EditorKind ..> EditTXT : new_edit_txt / edit_txt_suffixes
-    EditorKind ..> EditDOC : new_edit_doc / edit_doc_suffixes
+    EditKind ..> EditTXT : new_edit_txt / edit_txt_suffixes
+    EditKind ..> EditDOC : new_edit_doc / edit_doc_suffixes
     SubjectLogger o--> SubjectLogFunc : g_log_fn
     Subject ..> SubjectLogger : subject_log()
     Subject ..> WalkContext : walk_directory()
@@ -212,6 +234,7 @@ classDiagram
 
     note for Subject "Methods are function pointers assigned in new_subject()\nand called as self->method(self, ...)"
     note for Edit "Abstract methods are NULL in edit_init().\nEach subclass embeds Edit as its first member\nand assigns its own open/save/render/finalize.\nrender stores its widget with set_widget (weak pointer)."
+    note for Menu "The Menu is freed with its popover\n(g_object_set_data_full), never by the caller."
     note for EditDOC "All LibreOfficeKit code lives in editDOC.c.\ns_office is a process-wide singleton\nand is never destroyed."
 ```
 
@@ -245,9 +268,11 @@ classDiagram
 | --- | --- | --- |
 | `MainGUI` | `AppState` | `activate()` allocates the state and passes it as `user_data` to the callbacks. |
 | `MainGUI` | `SubjectPanel` | `on_add_clicked()` creates one panel per subject and ties it to the subject box with `g_object_set_data_full`; the panel callbacks receive it as `user_data`. |
-| `MainGUI` | `EditorKind` | `s_editor_kinds[]` is the static table behind the subject menu (`subject_menu_new()`). |
+| `MainGUI` | `MenuEditKind` | `on_add_clicked()` creates one menu per subject with `new_menu_edit_kind(on_kind_chosen, panel)` and gives its `popover` to the `GtkMenuButton`. |
+| `MenuEditKind` | `Menu` | Inheritance: embeds `Menu` as its first member, calls `menu_init()`, reuses `add_item`/`popdown` and implements `activate`. |
+| `MenuEditKind` | `EditKind` | Adds one entry per `edit_kinds[]` row (insensitive when `suffixes == NULL`) and passes the chosen row to `on_chosen`. |
 | `SubjectPanel` | `Edit` | Holds the open editor (or `NULL`); `subject_panel_free()` closes it. |
-| `EditorKind` | `EditTXT`, `EditDOC` | Each row points to a subclass constructor and its exported suffix list; PDF/UML rows are placeholders (`suffixes == NULL`). |
+| `EditKind` | `EditTXT`, `EditDOC` | Each `edit_kinds[]` row points to a subclass constructor and its exported suffix list; PDF/UML rows are placeholders (`suffixes == NULL`). |
 | `MainGUI` | `Subject` | `on_load_dialog_finish()` creates a `Subject` and calls `load_subject()`. |
 | `MainGUI` | `SubjectLogFunc` | `on_subject_log()` is the concrete implementation that writes to the footer label. |
 | `SubjectLogger` | `SubjectLogFunc` | Stores the registered callback in `g_log_fn` via `subject_set_logger()`. |
@@ -307,10 +332,18 @@ calls the subclass `finalize()` and then frees `path` and the object.
 
 See [editTXT.c](editTXT.c.md) and [editDOC.c](editDOC.c.md) for details.
 
-### Subject menu (`main.c`)
+## `Menu` hierarchy
 
-Pressing a subject button (`GtkMenuButton`) opens a popover with one entry per
-`EditorKind` row. Choosing a kind opens a file dialog filtered by that kind's
+`Menu` (`include/menu.h`, `src/menu.c`) is the abstract base for drop-down
+menus: it owns a `GtkPopover` with a vertical list of frameless buttons.
+Subclasses live in `include/msc/` and `src/msc/` (menu subclasses) and only
+decide which entries to add and what `activate` does. See
+[menu.c](menu.c.md) for details.
+
+### Subject menu (`MenuEditKind`)
+
+Pressing a subject button (`GtkMenuButton`) opens a `MenuEditKind` popover
+with one entry per `edit_kinds[]` row. Choosing a kind opens a file dialog filtered by that kind's
 suffixes; the chosen file is opened with the kind's constructor and rendered
 in the subject's `GtkRevealer`. Text and office documents are available;
 PDF and UML are shown greyed out until `EditPDF` / `EditUML` exist.

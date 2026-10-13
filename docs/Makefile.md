@@ -1,19 +1,19 @@
 # `Makefile`
 
-Status: draft for user approval; version 0.1.0.
+Status: draft for user approval; version 0.1.1.
 
 ## Purpose
 
-Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.1.0`.
+Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.1.1`.
 
 | Target | Behavior |
 | --- | --- |
 | `all` | Requests both Linux and Windows builds; default target. |
-| `linux` | Builds `build/studystudio-0.1.0_linux` with GCC. |
-| `win64` | Builds `build/studystudio-0.1.0_win64.exe` with MinGW-w64. |
-| `debug` | Builds `build/studystudio-0.1.0_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
+| `linux` | Builds `build/studystudio-0.1.1_linux` with GCC. |
+| `win64` | Builds `build/studystudio-0.1.1_win64.exe` with MinGW-w64. |
+| `debug` | Builds `build/studystudio-0.1.1_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
-| `win64-debug` | Builds `build/studystudio-0.1.0_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
+| `win64-debug` | Builds `build/studystudio-0.1.1_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
 | `setup` | Creates platform object directories, including both debug ones. |
 | `clean` | Empties the contents of `build` and removes the root-level `resources.c`, leaving the `build` directory itself in place. |
 
@@ -27,12 +27,12 @@ The `debug` target reuses the same source discovery and GTK4/liblzma linking as 
 
 Use `make linux`, `make win64`, or `make all` inside an environment with the required tools and libraries. These are configured build targets, not evidence that both platforms currently compile successfully. `make debug`/`make gdb`/`make win64-debug` have the same toolchain requirement as `linux`/`win64`; see [README.md's GDB debugging section](../README.md#-debugging-with-gdb) for the recommended Docker-build/host-debug workflow. `win64-debug` has no `gdb`-equivalent shortcut, since cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up.
 
-Since 0.1.0 (in development) `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryA` (kernel32, always linked by MinGW).
+Since 0.1.0 (in development) `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryA` (kernel32, always linked by MinGW). Since 0.1.1 `SRCS` also discovers `src/msc/*.c` (menu subclasses); the object rules already create `build/<target>/msc/` with `@mkdir -p $(@D)`.
 
 ## Current limitations
 
-- Source discovery is limited to `src/*.c` and `src/edit_subclass/*.c`; other nested modules require updated rules.
-- `HEADERS` uses `include/.h` rather than `include/*.h` and is not used as a prerequisite. Header changes alone do not reliably rebuild dependent objects.
+- Source discovery is limited to `src/*.c`, `src/edit_subclass/*.c` and `src/msc/*.c`; other nested modules require updated rules.
+- `HEADERS` (`include/*.h` since 0.1.1, it was `include/.h`) is not used as a prerequisite. Header changes alone do not reliably rebuild dependent objects.
 - There is no test target or compiler-generated header dependency tracking.
 - As of version 0.0.8 both `linux` and `win64` build and link successfully; `include/subject.h` now guards its Windows/POSIX-specific fields and includes correctly, so `subject.c` compiles cleanly on both targets. Version 0.0.9 fixed `main.c` build errors (see [main.c](main.c.md)) and removed a stray declaration from `subject.h` that produced a `-Wunused-function` warning on the Windows build (see [subject.h](subject.h.md)). See [subject.c](subject.c.md) for the remaining implementation limitations.
 - As of version 0.0.13, `win64-debug` gives Windows a debug build target, but there is still no way to actually attach a debugger to it from this toolchain — `gdb` itself only runs against the native Linux `debug` binary. Running `gdb` inside the Docker build container is also not supported out of the box (no `ptrace` capability or display forwarding is configured), so `make gdb` is intended to be run on the host after the object files exist.
