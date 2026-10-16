@@ -64,11 +64,12 @@ and other consumers can share it.
 | `label` | Text of the menu entry. |
 | `filter_name` | Name shown in the file dialog filter. |
 | `suffixes` | The subclass's suffix list; `NULL` means the editor is not implemented yet. |
-| `create` | Subclass constructor (`new_edit_txt`, `new_edit_doc`). |
+| `create` | Subclass constructor (`new_edit_txt`, `new_edit_doc`, `new_edit_pdf`). |
 | `available` | Optional runtime check (`edit_doc_available`); `NULL` means always available. |
 
-`edit_kinds[]` has one row per kind: text, office document, and the PDF and
-UML placeholders (`suffixes == NULL`, shown greyed out as "(próximamente)").
+`edit_kinds[]` has one row per kind: text, office document, PDF (`EditPDF`,
+see [editPDF.c](editPDF.c.md)) and the UML placeholder (`suffixes == NULL`,
+shown greyed out as "(próximamente)").
 Adding an editor means adding a row. Outside `edit.c` the array is declared
 `extern const EditKind edit_kinds[];`, an incomplete type whose size the
 compiler does not know, so `G_N_ELEMENTS` cannot be used there: the size is

@@ -185,10 +185,19 @@ classDiagram
     }
 
     class EditPDF {
-        <<planned>>
+        +PopplerDocument* doc
+        +int n_pages
+        +EditPDFPage* pages
+        +double zoom
+        +EditPDFTool tool
+        +GtkWidget* pages_box
+        +GtkWidget* zoom_label
+        +GtkWidget* note_entry
         +open(const char* path) int
         +save() int
         +render(GtkWidget* container) void
+        +finalize() void
+        +new_edit_pdf()$ Edit*
     }
 
     class EditUML {
@@ -272,7 +281,7 @@ classDiagram
 | `MenuEditKind` | `Menu` | Inheritance: embeds `Menu` as its first member, calls `menu_init()`, reuses `add_item`/`popdown` and implements `activate`. |
 | `MenuEditKind` | `EditKind` | Adds one entry per `edit_kinds[]` row (insensitive when `suffixes == NULL`) and passes the chosen row to `on_chosen`. |
 | `SubjectPanel` | `Edit` | Holds the open editor (or `NULL`); `subject_panel_free()` closes it. |
-| `EditKind` | `EditTXT`, `EditDOC` | Each `edit_kinds[]` row points to a subclass constructor and its exported suffix list; PDF/UML rows are placeholders (`suffixes == NULL`). |
+| `EditKind` | `EditTXT`, `EditDOC`, `EditPDF` | Each `edit_kinds[]` row points to a subclass constructor and its exported suffix list; the UML row is a placeholder (`suffixes == NULL`). |
 | `MainGUI` | `Subject` | `on_load_dialog_finish()` creates a `Subject` and calls `load_subject()`. |
 | `MainGUI` | `SubjectLogFunc` | `on_subject_log()` is the concrete implementation that writes to the footer label. |
 | `SubjectLogger` | `SubjectLogFunc` | Stores the registered callback in `g_log_fn` via `subject_set_logger()`. |
@@ -282,7 +291,8 @@ classDiagram
 | `Edit` | `EditTXT`, `EditDOC` | Factory: `new_edit_for_path()` picks the subclass by searching `edit_txt_suffixes` / `edit_doc_suffixes` (the latter only if `edit_doc_available()`), then calls `open()`. |
 | `EditDOC` | `LibreOfficeKitDocument` | Aggregation: owns the loaded document (`lok`) and calls `destroy()` on it in `finalize`. |
 | `EditDOC` | `LibreOfficeKit` | Uses the process-wide `s_office` created once by `lok_init()`; it is shared by every `EditDOC` and never destroyed. |
-| `EditPDF`, `EditUML`, `EditCode` | `Edit` | **Planned, not implemented.** Same inheritance contract as `EditTXT`/`EditDOC`. |
+| `EditPDF` | `Edit` | PDF viewer/annotator backed by Poppler (see [editPDF.c](editPDF.c.md)). |
+| `EditUML`, `EditCode` | `Edit` | **Planned, not implemented.** Same inheritance contract as `EditTXT`/`EditDOC`. |
 
 ## `Edit` hierarchy
 
@@ -345,8 +355,8 @@ decide which entries to add and what `activate` does. See
 Pressing a subject button (`GtkMenuButton`) opens a `MenuEditKind` popover
 with one entry per `edit_kinds[]` row. Choosing a kind opens a file dialog filtered by that kind's
 suffixes; the chosen file is opened with the kind's constructor and rendered
-in the subject's `GtkRevealer`. Text and office documents are available;
-PDF and UML are shown greyed out until `EditPDF` / `EditUML` exist.
+in the subject's `GtkRevealer`. Text, office documents and PDF are available;
+UML is shown greyed out until `EditUML` exists.
 
 ### Diagram review (2026-10-12)
 

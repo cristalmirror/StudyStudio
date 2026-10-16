@@ -35,6 +35,7 @@ The project showcases:
 - 📜 **Scrollable content**: `GtkScrolledWindow` for handling long lists
 - ⚡ **Fast builds**: Uses precompiled Fedora packages instead of building from source
 - 📄 **Office documents (in development)**: `.docx`, `.odt`, `.xlsx`, `.pptx`... are opened through LibreOfficeKit; it needs LibreOffice installed at run time (or `STUDYSTUDIO_LO_PATH` pointing to its `program` folder)
+- 📕 **PDF (in development)**: `.pdf` files are shown with Poppler (poppler-glib) and can be annotated (highlight, rectangle, sticky notes, erase) and saved
 
 ---
 
@@ -129,7 +130,8 @@ StudyStudio/
 │ ├── menu.c # Menu base class (drop-down menus)
 │ ├── edit_subclass/
 │ │ ├── editTXT.c # Plain-text editor (.txt, .md)
-│ │ └── editDOC.c # Office editor through LibreOfficeKit
+│ │ ├── editDOC.c # Office editor through LibreOfficeKit
+│ │ └── editPDF.c # PDF viewer/annotator through Poppler
 │ └── msc/ # menu subclasses
 │   └── menuEditKind.c # Subject menu: which kind of document to edit
 ├── build/
@@ -141,7 +143,7 @@ StudyStudio/
 │ ├ subject.h #definitions subject manager
 │ ├ edit.h # Edit base class
 │ ├ menu.h # Menu base class
-│ ├ edit_subclass/ # editTXT.h, editDOC.h, ...
+│ ├ edit_subclass/ # editTXT.h, editDOC.h, editPDF.h, ...
 │ ├ msc/ # menuEditKind.h, ...
 │ └ third_party/LibreOfficeKit/ # vendored LOK headers (MPL-2.0, patched for C)
 ├── interface.ui # GTK4 UI definition (XML)

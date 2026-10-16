@@ -9,7 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c`:
+  `EditPDF`, the PDF editor as an `Edit` subclass backed by Poppler
+  (poppler-glib). Shows every page in a scrolled column with zoom, and a
+  toolbar with tools (`EditPDFTool`) to highlight text, draw rectangles,
+  add sticky notes and erase annotations. `save`
+  writes the annotations back to the file (see `docs/editPDF.c.md`).
+  Every data structure (`EditPDF`, `EditPDFPage`, `EditPDFTool`,
+  `EditPDFToolInfo`) is in `editPDF.h`; `editPDF.c` only has the operations
+  and constant tables.
+- `docs/editPDF.c.md`.
+
+### Changed
+- `Dockerfile`: installs `poppler-glib-devel` and `mingw64-poppler-glib`
+  (Poppler is GPL-2.0-or-later, compatible with GPLv3).
+- `Makefile`: `pkgconf` asks for `gtk4 poppler-glib` on both targets, and
+  every target links `-lm` (`editPDF.c` uses `<math.h>`).
+- `src/edit.c`: the PDF row of `edit_kinds[]` and the factory now create
+  `EditPDF` for `.pdf` files.
 ### Known Issues
+- `EditPDF` has only been compiled, not run. Pending runtime checks:
+  annotations created with Poppler on real PDFs (highlight quads),
+  saving over the opened file (on Windows too) and the Poppler DLLs, which
+  must be shipped next to the Windows `.exe`. Page rotation is ignored by
+  the annotation coordinates, there is no undo, and notes take their text
+  from the toolbar entry (no popover). No pen tool: Poppler 24.02's GLib API
+  (Fedora 40) has no ink annotations nor border width.
 - `EditDOC` is view-only (no keyboard/mouse input yet), targets Writer
   rendering, and has only been compiled, not run. Pending runtime checks:
   clean exit without `office->destroy()` (it crashed in the spike),

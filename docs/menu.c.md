@@ -57,8 +57,8 @@ The subject menu: "what do you want to edit?".
 | `user_data` | Passed back to `on_chosen`; `main.c` uses the `SubjectPanel`. |
 
 `new_menu_edit_kind(on_chosen, user_data)` adds one entry per `edit_kinds[]`
-row, insensitive when the row's `suffixes` is `NULL` (PDF and UML
-placeholders). Its `activate` downcasts to `MenuEditKind *` and forwards the
+row, insensitive when the row's `suffixes` is `NULL` (the UML
+placeholder). Its `activate` downcasts to `MenuEditKind *` and forwards the
 chosen `const EditKind *` to `on_chosen`. It returns `NULL` if allocation
 fails, and has no `finalize` because it owns no extra memory.
 

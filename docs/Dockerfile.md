@@ -4,7 +4,9 @@ Status: draft for user approval; version 0.1.1.
 
 ## Purpose and configuration
 
-Defines a Fedora 40 container image for compiling the application. Installs GCC/G++, Make, Git, pkg-config support, Linux GTK4/liblzma development packages, and MinGW-w64 compiler and GTK4/XZ packages. Cleans package-manager caches after installation.
+Defines a Fedora 40 container image for compiling the application. Installs GCC/G++, Make, Git, pkg-config support, Linux GTK4/liblzma development packages, and MinGW-w64 compiler and GTK4/XZ packages.
+
+Since 0.1.1 (in development) it also installs Poppler for `EditPDF` ([editPDF.c](editPDF.c.md)): `poppler-glib-devel` (Linux) and `mingw64-poppler-glib` (Windows). Poppler is GPL-2.0-or-later, so it can be combined with StudyStudio's GPLv3. The existing image must be rebuilt (`docker build -t mi_app_builder .`) before `make` finds `poppler-glib`. Cleans package-manager caches after installation.
 
 Sets `/usr/src/app` as the working directory and copies the repository into the image. The default command is `/bin/bash`; building the image does not compile StudyStudio. A container invocation must run an appropriate Makefile target to produce binaries.
 
