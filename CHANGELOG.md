@@ -10,11 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Known Issues
+- `EditPDF` has only been compiled, not run. Pending runtime checks:
+  annotations created with Poppler on real PDFs (highlight quads),
+  saving over the opened file (on Windows too) and the Poppler DLLs, which
+  must be shipped next to the Windows `.exe`. Page rotation is ignored by
+  the annotation coordinates, there is no undo, and notes take their text
+  from the toolbar entry (no popover). No pen tool: Poppler 24.02's GLib API
+  (Fedora 40) has no ink annotations nor border width.
 - `EditDOC` is view-only (no keyboard/mouse input yet), targets Writer
   rendering, and has only been compiled, not run. Pending runtime checks:
   clean exit without `office->destroy()` (it crashed in the spike),
   `saveAs` over the opened file, and LibreOffice on Windows.
-- The subject menu has not been run yet (built for Linux and Windows only).
+- The subject menu (`MenuEditKind`) has not been run yet (built for Linux
+  and Windows only).
   Closing a document with unsaved changes is refused with a footer message;
   there is no Save/Discard dialog. The first office document blocks the UI
   while LibreOffice starts.
@@ -48,6 +56,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.1.2] - 2026-10-16
+
+### Added
+- `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c`:
+  `EditPDF`, the PDF editor as an `Edit` subclass backed by Poppler
+  (poppler-glib). Shows every page in a scrolled column with zoom, and a
+  toolbar with tools (`EditPDFTool`) to highlight text, draw rectangles,
+  add sticky notes and erase annotations. `save`
+  writes the annotations back to the file (see `docs/editPDF.c.md`).
+  Every data structure (`EditPDF`, `EditPDFPage`, `EditPDFTool`,
+  `EditPDFToolInfo`) is in `editPDF.h`; `editPDF.c` only has the operations
+  and constant tables.
+- `docs/editPDF.c.md`.
+
+### Changed
+- `Dockerfile`: installs `poppler-glib-devel` and `mingw64-poppler-glib`
+  (Poppler is GPL-2.0-or-later, compatible with GPLv3).
+- `Makefile`: `pkgconf` asks for `gtk4 poppler-glib` on both targets, and
+  every target links `-lm` (`editPDF.c` uses `<math.h>`).
+- `src/edit.c`: the PDF row of `edit_kinds[]` and the factory now create
+  `EditPDF` for `.pdf` files.
+- Bumped the project version to `0.1.2`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field of every file header, the "Status" /
+  baseline version lines and binary names across `docs/*.md`, and the commit
+  example in `CLAUDE.md`.
+
+## [0.1.1] - 2026-10-13
+
+### Added
+- `include/menu.h`, `src/menu.c`: abstract `Menu` base "class" for
+  drop-down menus (same inheritance pattern as `Edit`): `popover` and `list`
+  widgets, abstract `activate`/`finalize`, common `add_item`/`popdown` and
+  `menu_init()`. The menu is freed together with its popover through
+  `g_object_set_data_full`, so callers never free it (see `docs/menu.c.md`).
+- `include/msc/menuEditKind.h`, `src/msc/menuEditKind.c`: `MenuEditKind`,
+  the subject menu as a `Menu` subclass. `new_menu_edit_kind(on_chosen,
+  user_data)` adds one entry per `edit_kinds[]` row and reports the chosen
+  `EditKind` through the `MenuEditKindChosen` callback. New `msc/` ("menu
+  subclasses") directories for future menus.
+- `docs/menu.c.md`.
+
+### Changed
+- Bumped the project version to `0.1.1`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field of every file header (and `Last edited`
+  of the files changed in this release), the "Status"/baseline version lines
+  and `studystudio-0.1.x` mentions across `docs/*.md`, and the commit example
+  in `CLAUDE.md`.
+- `EditorKind` / `s_editor_kinds` moved from `src/main.c` to
+  `include/edit.h` / `src/edit.c` as `EditKind` / `edit_kinds[]`, with
+  `edit_kinds_count` exported for code outside `edit.c`. It describes the
+  `Edit` subclasses, so it belongs to that hierarchy, not to the menu.
+- `src/main.c`: the subject popover is now built with
+  `new_menu_edit_kind(on_kind_chosen, panel)`. `subject_menu_new` was
+  removed, and `on_kind_clicked(GtkButton *, gpointer)` became
+  `on_kind_chosen(const EditKind *, gpointer)` (the popdown and the
+  `"kind"` object data are handled by `Menu`). `main.c` no longer includes
+  `editTXT.h`/`editDOC.h`.
+- `Makefile`: `SRCS` also compiles `src/msc/*.c`.
+- `src/edit_subclass/editDOC.c`: `_doc_draw`, `_doc_on_resize` and the
+  `cairo_image_surface_create` call joined onto single lines.
+- `docs/main.c.md`, `docs/edit.c.md`, `docs/class_diagram.md`,
+  `docs/Makefile.md`, `docs/README.md`, `README.md`: updated for `Menu`,
+  `MenuEditKind`, `EditKind` and the `msc/` directories.
+
+### Fixed
+- `Makefile`: `HEADERS` used `$(INCLUDE_DIR)/.h` and matched nothing; it is
+  now `$(INCLUDE_DIR)/*.h` (still not used as a prerequisite).
 
 ## [0.1.0] - 2026-10-12
 

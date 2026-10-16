@@ -1,6 +1,6 @@
 # `src/subject.c`
 
-Status: draft for user approval; version 0.1.0.
+Status: draft for user approval; version 0.1.2.
 
 ## Purpose and dependencies
 

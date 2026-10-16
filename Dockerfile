@@ -9,11 +9,14 @@ RUN dnf install -y \
     xz-devel libarchive-devel \
     # --- GTK4 libraries for Linux ---
     pkgconf-pkg-config gtk4-devel \
+    # --- PDF rendering/annotations (Poppler, GPLv2+/GPLv3) for EditPDF ---
+    poppler-glib-devel \
     # --- GTK4 libraries for Windows (cross-compilation) ---
     mingw64-gcc \
     mingw64-gtk4 \
     mingw64-xz \
     mingw64-libarchive \
+    mingw64-poppler-glib \
     mingw64-pkg-config \
     && dnf clean all
 

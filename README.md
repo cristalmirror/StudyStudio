@@ -2,7 +2,7 @@
 
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
-[![Version](https://img.shields.io/badge/version-0.1.0-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.2-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
@@ -10,7 +10,7 @@
 ---
 
 > [!WARNING]
-> **This project is in early development (v0.1.0).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
+> **This project is in early development (v0.1.2).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
 
 ---
 
@@ -35,6 +35,7 @@ The project showcases:
 - 📜 **Scrollable content**: `GtkScrolledWindow` for handling long lists
 - ⚡ **Fast builds**: Uses precompiled Fedora packages instead of building from source
 - 📄 **Office documents (in development)**: `.docx`, `.odt`, `.xlsx`, `.pptx`... are opened through LibreOfficeKit; it needs LibreOffice installed at run time (or `STUDYSTUDIO_LO_PATH` pointing to its `program` folder)
+- 📕 **PDF (in development)**: `.pdf` files are shown with Poppler (poppler-glib) and can be annotated (highlight, rectangle, sticky notes, erase) and saved
 
 ---
 
@@ -125,10 +126,14 @@ StudyStudio/
 ├── src/
 │ ├── main.c # Application entry point and callbacks
 │ ├── subject.c # Implementations 
-│ ├── edit.c # Edit base class and editor factory
-│ └── edit_subclass/
-│   ├── editTXT.c # Plain-text editor (.txt, .md)
-│   └── editDOC.c # Office editor through LibreOfficeKit
+│ ├── edit.c # Edit base class, editor kinds and factory
+│ ├── menu.c # Menu base class (drop-down menus)
+│ ├── edit_subclass/
+│ │ ├── editTXT.c # Plain-text editor (.txt, .md)
+│ │ ├── editDOC.c # Office editor through LibreOfficeKit
+│ │ └── editPDF.c # PDF viewer/annotator through Poppler
+│ └── msc/ # menu subclasses
+│   └── menuEditKind.c # Subject menu: which kind of document to edit
 ├── build/
 │ ├── linux/ # Linux object files (release)
 │ ├── linux-debug/ # Linux object files (debug, for GDB)
@@ -137,7 +142,9 @@ StudyStudio/
 ├──include
 │ ├ subject.h #definitions subject manager
 │ ├ edit.h # Edit base class
-│ ├ edit_subclass/ # editTXT.h, editDOC.h, ...
+│ ├ menu.h # Menu base class
+│ ├ edit_subclass/ # editTXT.h, editDOC.h, editPDF.h, ...
+│ ├ msc/ # menuEditKind.h, ...
 │ └ third_party/LibreOfficeKit/ # vendored LOK headers (MPL-2.0, patched for C)
 ├── interface.ui # GTK4 UI definition (XML)
 ├── resources.xml
