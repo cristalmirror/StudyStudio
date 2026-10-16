@@ -9,25 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c`:
-  `EditPDF`, the PDF editor as an `Edit` subclass backed by Poppler
-  (poppler-glib). Shows every page in a scrolled column with zoom, and a
-  toolbar with tools (`EditPDFTool`) to highlight text, draw rectangles,
-  add sticky notes and erase annotations. `save`
-  writes the annotations back to the file (see `docs/editPDF.c.md`).
-  Every data structure (`EditPDF`, `EditPDFPage`, `EditPDFTool`,
-  `EditPDFToolInfo`) is in `editPDF.h`; `editPDF.c` only has the operations
-  and constant tables.
-- `docs/editPDF.c.md`.
-
-### Changed
-- `Dockerfile`: installs `poppler-glib-devel` and `mingw64-poppler-glib`
-  (Poppler is GPL-2.0-or-later, compatible with GPLv3).
-- `Makefile`: `pkgconf` asks for `gtk4 poppler-glib` on both targets, and
-  every target links `-lm` (`editPDF.c` uses `<math.h>`).
-- `src/edit.c`: the PDF row of `edit_kinds[]` and the factory now create
-  `EditPDF` for `.pdf` files.
 ### Known Issues
 - `EditPDF` has only been compiled, not run. Pending runtime checks:
   annotations created with Poppler on real PDFs (highlight quads),
@@ -75,6 +56,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.1.2] - 2026-10-16
+
+### Added
+- `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c`:
+  `EditPDF`, the PDF editor as an `Edit` subclass backed by Poppler
+  (poppler-glib). Shows every page in a scrolled column with zoom, and a
+  toolbar with tools (`EditPDFTool`) to highlight text, draw rectangles,
+  add sticky notes and erase annotations. `save`
+  writes the annotations back to the file (see `docs/editPDF.c.md`).
+  Every data structure (`EditPDF`, `EditPDFPage`, `EditPDFTool`,
+  `EditPDFToolInfo`) is in `editPDF.h`; `editPDF.c` only has the operations
+  and constant tables.
+- `docs/editPDF.c.md`.
+
+### Changed
+- `Dockerfile`: installs `poppler-glib-devel` and `mingw64-poppler-glib`
+  (Poppler is GPL-2.0-or-later, compatible with GPLv3).
+- `Makefile`: `pkgconf` asks for `gtk4 poppler-glib` on both targets, and
+  every target links `-lm` (`editPDF.c` uses `<math.h>`).
+- `src/edit.c`: the PDF row of `edit_kinds[]` and the factory now create
+  `EditPDF` for `.pdf` files.
+- Bumped the project version to `0.1.2`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field of every file header, the "Status" /
+  baseline version lines and binary names across `docs/*.md`, and the commit
+  example in `CLAUDE.md`.
 
 ## [0.1.1] - 2026-10-13
 

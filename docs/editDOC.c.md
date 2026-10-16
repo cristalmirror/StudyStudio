@@ -1,6 +1,6 @@
 # `include/edit_subclass/editDOC.h` and `src/edit_subclass/editDOC.c`
 
-Status: draft for user approval; version 0.1.1. Phase 1 of
+Status: draft for user approval; version 0.1.2. Phase 1 of
 the LibreOfficeKit integration: view and save.
 
 ## Purpose

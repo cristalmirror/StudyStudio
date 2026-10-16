@@ -1,6 +1,6 @@
 # `resources.xml`
 
-Status: draft for user approval; version 0.1.1.
+Status: draft for user approval; version 0.1.2.
 
 ## Purpose and integration
 

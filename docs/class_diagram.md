@@ -1,6 +1,6 @@
 # Class diagram
 
-Status: draft for user approval; version 0.1.1.
+Status: draft for user approval; version 0.1.2.
 
 > [!NOTE]
 > `Edit`, `EditTXT` and `EditDOC` are implemented in `src/edit.c` and
