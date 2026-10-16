@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.1
  * License: GPLv3
- * Last edited: 2026-10-13
+ * Last edited: 2026-10-16
  */
 /*
  * Common operations of the Edit hierarchy and the factory that
@@ -14,12 +14,13 @@
 #include "../include/edit.h"
 #include "../include/edit_subclass/editTXT.h"
 #include "../include/edit_subclass/editDOC.h"
+#include "../include/edit_subclass/editPDF.h"
 
 const EditKind edit_kinds[] = {
     { "📝 Texto (.txt, .md)", "Texto", edit_txt_suffixes, new_edit_txt, NULL },
     { "📄 Documento (.docx, .odt, .xlsx, .pptx...)", "Documentos de oficina",
       edit_doc_suffixes, new_edit_doc, edit_doc_available },
-    { "📕 PDF (próximamente)", NULL, NULL, NULL, NULL },
+    { "📕 PDF (.pdf)", "PDF", edit_pdf_suffixes, new_edit_pdf, NULL },
     { "📐 UML (próximamente)", NULL, NULL, NULL, NULL },
 };
 const size_t edit_kinds_count = G_N_ELEMENTS(edit_kinds);
@@ -115,8 +116,9 @@ Edit *new_edit_for_path(const char *path) {
         edit = new_edit_txt();
     } else if (_suffix_in(ext, edit_doc_suffixes) && edit_doc_available()) {
         edit = new_edit_doc();
+    } else if (_suffix_in(ext, edit_pdf_suffixes)) {
+        edit = new_edit_pdf();
     }
-    /* else if (... ".pdf") edit = new_edit_pdf(); */
 
     if (edit == NULL) return NULL;
 
