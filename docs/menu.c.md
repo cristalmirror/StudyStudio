@@ -6,7 +6,8 @@ Status: draft for user approval; version 0.1.2.
 
 Defines `Menu`, the abstract base "class" of every drop-down menu of
 StudyStudio, and its subclasses under `include/msc/` and `src/msc/` ("menu
-subclasses"). `menu.h` depends only on GTK4 and `<stdbool.h>`. The only
+subclasses"; since 0.1.3 the folder also holds the
+[`SubjectDialog`](subjectDialog.c.md) window, which is not a `Menu`). `menu.h` depends only on GTK4 and `<stdbool.h>`. The only
 subclass today is `MenuEditKind`, the subject menu, which also depends on
 `include/edit.h` for `EditKind` and `edit_kinds[]` (see
 [edit.c](edit.c.md#editor-kinds)). See the
@@ -56,9 +57,13 @@ The subject menu: "what do you want to edit?".
 | `on_chosen` | `MenuEditKindChosen` callback, `void (*)(const EditKind *kind, gpointer user_data)`. |
 | `user_data` | Passed back to `on_chosen`; `main.c` uses the `SubjectPanel`. |
 
-`new_menu_edit_kind(on_chosen, user_data)` adds one entry per `edit_kinds[]`
-row, insensitive when the row's `suffixes` is `NULL` (the UML
-placeholder). Its `activate` downcasts to `MenuEditKind *` and forwards the
+`new_menu_edit_kind(on_chosen, user_data, enabled)` adds one entry per
+`edit_kinds[]` row, insensitive when the row's `suffixes` is `NULL` (the UML
+placeholder). Since 0.1.3, `enabled` filters the rows: when it is not `NULL`,
+a row `i` with `enabled[i] == false` gets no entry at all, so a subject only
+lists the kinds chosen when it was created. `enabled` must have
+`edit_kinds_count` elements; it is only read during the call, so the caller
+keeps its ownership. `NULL` lists every kind. Its `activate` downcasts to `MenuEditKind *` and forwards the
 chosen `const EditKind *` to `on_chosen`. It returns `NULL` if allocation
 fails, and has no `finalize` because it owns no extra memory.
 

@@ -14,21 +14,49 @@ above the existing purpose comment.
 
 ## Lifecycle and helper operations
 
-`new_subject` allocates the object, initializes `val` and the platform process
-field (`proc_handle` on Windows, `pid` elsewhere), and assigns all operation
-pointers, including the Windows-only `is_dot_or_dotdot`, `feed_bytes`, and
-`walk_directory` methods. `_close_subject` frees the object
-only. `_read_subject` prints its integer value to `stdout` and also reports it
+`new_subject` allocates the object, initializes `val`, sets `name` and `dir`
+to `NULL` and the platform process field (`proc_handle` on Windows, `pid`
+elsewhere), and assigns all operation pointers, including `make_subject` and
+the Windows-only `is_dot_or_dotdot`, `feed_bytes`, and `walk_directory`
+methods. `_close_subject` frees `name`, `dir` and the object. `_read_subject` prints its integer value to `stdout` and also reports it
 through `subject_log`. `_fatal` calls `perror` and `exit(EXIT_FAILURE)`.
 `_write_file_entry_to_lzma` builds the little-endian length and size headers
 inline and passes them through `feed_bytes`, so they are compressed together
 with the file content.
 
-`_make_subject(self)` is a placeholder added in 0.0.15 and has no
-implementation yet. It is intended to build the container of resources a
-subject needs (folders, tools, edits, etc.). It is not declared in
-`subject.h`, is not assigned to any operation pointer in `new_subject`, and
-is not called anywhere, so it currently has no effect.
+## Making a subject
+
+As of 0.1.3, `_make_subject(self, base_dir, name, folders)` (exposed as
+`self->make_subject`) builds the container of a new subject on disk:
+
+1. Validates `name` with `_is_valid_subject_name`: it must not be empty,
+   `.` or `..`, nor contain `/ \ : * ? " < > |`, because it becomes a single
+   folder on both platforms.
+2. Creates `base_dir` (e.g. `~/StudyStudio`); it is fine if it exists. Its
+   parent must exist: there is no `mkdir -p`.
+3. Creates `<base_dir>/<name>`, joined with `SUBJECT_SEP` (`/` or `\`). It
+   must be new: an existing folder is reported as `Subject already exists`
+   and the call fails, so two subjects are never mixed.
+4. Creates one subfolder per entry of `folders`, a NULL-terminated list like
+   the editors' suffix lists (`main.c` passes the `filter_name` of each chosen
+   `EditKind`). `folders` may be `NULL`.
+5. Replaces `self->name` and `self->dir` with owned copies (`strdup`) of the
+   name and the full subject path.
+
+It returns `0` on success and `-1` on any error; every outcome is reported
+through `subject_log`, so `main.c` does not repeat the reason. Paths are
+built with `snprintf` into `SUBJECT_PATH_MAX` buffers (`PATH_MAX` /
+`MAX_PATH`) and a truncated path is an error.
+
+`_mkdir_utf8(path)` creates one folder and returns `0` (created), `1`
+(already existed) or `-1` (error). Linux uses `mkdir(path, 0755)`. Windows
+converts the UTF-8 path that GTK gives to UTF-16 with `MultiByteToWideChar`
+and calls `CreateDirectoryW`: `CreateDirectoryA` would read it in the ANSI
+code page and break names such as `Física`. The rest of the Windows code
+(`_win_mkdir_p`, `FindFirstFileA`, `fopen`) still uses ANSI paths.
+
+There is no rollback: if a subfolder fails, the folders already created stay
+on disk.
 
 ## Logging
 
@@ -183,6 +211,8 @@ The defects described in earlier versions of this document (the four-argument `s
   in C and `LZMA_RUN` is guaranteed to be `0` by the liblzma API, but it is
   confusing to read and fragile if that guarantee ever changed. It should
   read `uint8_t *acc = NULL;`.
+- `_make_subject` leaves the folders it already created when a later step
+  fails, and the base folder's parent must exist.
 - `MAX_PATH` and `FindFirstFileA` limit Windows paths and do not provide full
   Unicode-path support.
 - Windows only: `_save_subject`'s parent/basename split does not handle a
