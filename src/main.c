@@ -7,8 +7,10 @@
  */
 
 #include <gtk/gtk.h>
+#include <signal.h>
 #include "../include/subject.h"
 #include "../include/edit.h"
+#include "../include/edit_subclass/editDOC.h"
 #include "../include/msc/menuEditKind.h"
 #include "../include/msc/subjectDialog.h"
 
@@ -17,6 +19,7 @@ typedef struct {
     GtkWidget *destiny_content; //save the element
     GtkWidget *window;
     GtkWidget *footer_label; /* status messages */
+    GCancellable *cancellable; /* cancelled when the window closes */
     int counter; //number of element(index)
 } AppState;
 
@@ -99,8 +102,8 @@ static void on_kind_chosen(const EditKind *kind, gpointer user_data) {
         g_object_unref(initial);
     }
     g_free(kind_dir);
-    gtk_file_dialog_open(dialog, GTK_WINDOW(panel->state->window), NULL,
-                         on_open_doc_finish, panel);
+    gtk_file_dialog_open(dialog, GTK_WINDOW(panel->state->window),
+                         panel->state->cancellable, on_open_doc_finish, panel);
     g_object_unref(filter);
     g_object_unref(dialog);
 }
@@ -271,7 +274,7 @@ static void on_load_clicked(GtkButton *button, gpointer user_data) {
      */
     GtkFileDialog *dialog = gtk_file_dialog_new();
     gtk_file_dialog_set_title(dialog, "Cargar Materia");
-    gtk_file_dialog_open(dialog, GTK_WINDOW(state->window), NULL,
+    gtk_file_dialog_open(dialog, GTK_WINDOW(state->window), state->cancellable,
                          on_load_dialog_finish, state);
     g_object_unref(dialog);
 }
@@ -283,8 +286,10 @@ static void on_load_dialog_finish(GObject *source, GAsyncResult *res, gpointer u
 
     GFile *file = gtk_file_dialog_open_finish(GTK_FILE_DIALOG(source), res, &error);
     if (file == NULL) {
-        /* the user closing the dialog is not an error worth reporting */
-        if (!g_error_matches(error, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED)) {
+        /* the user closing the dialog, or the window closing (cancelled),
+         * is not an error worth reporting */
+        if (!g_error_matches(error, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED) &&
+            !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
             g_print("Error al abrir el archivo: %s\n", error->message);
         }
         g_clear_error(&error);
@@ -320,6 +325,24 @@ static void on_subject_log(const char *msg, void *user_data) {
 }
 
 /*
+ * The window starts being destroyed (its children still exist):
+ * nothing may reach it from now on.
+ */
+static void on_window_destroy(GtkWidget *window, gpointer user_data) {
+    (void)window;
+    AppState *state = (AppState *)user_data;
+    subject_set_logger(NULL, NULL);            /* footer_label is about to die */
+    g_cancellable_cancel(state->cancellable);  /* pending file dialogs end with an error */
+}
+
+/* runs when the window is finalized: after every panel was freed */
+static void app_state_free(gpointer data) {
+    AppState *state = (AppState *)data;
+    g_object_unref(state->cancellable);
+    g_free(state);
+}
+
+/*
   function of activate
 */
 static void activate(GtkApplication *app, gpointer user_data) {
@@ -345,6 +368,10 @@ static void activate(GtkApplication *app, gpointer user_data) {
     state->window = window;
     state->destiny_content = target_box;
     state->counter = 0;
+    state->cancellable = g_cancellable_new();
+    /* the state lives as long as the window: GTK frees it for us */
+    g_object_set_data_full(G_OBJECT(window), "app-state", state, app_state_free);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), state);
     g_signal_connect(add_button, "clicked",G_CALLBACK(on_add_clicked), state);
     g_signal_connect(load_button,"clicked",G_CALLBACK(on_load_clicked), state);
     // print and clean
@@ -359,9 +386,27 @@ static void activate(GtkApplication *app, gpointer user_data) {
 }
 
 int main(int argc, char *argv[]) {
+#ifndef _WIN32
+    /*
+     * Writing to a pipe whose reader died (tar not installed, tar rejected
+     * the data) sends SIGPIPE, which kills the whole app by default.
+     * Ignored, write() fails with EPIPE and subject.c reports the error.
+     */
+    signal(SIGPIPE, SIG_IGN);
+#endif
     GtkApplication *app = gtk_application_new("org.ejemplo.app", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
     int status = g_application_run(G_APPLICATION(app), argc, argv);
     g_object_unref(app);
+
+    /*
+     * LibreOffice's static destructors crash inside exit() (SIGSEGV in
+     * desktop_LOKClipboard). Everything of ours is already saved and freed
+     * here, so if LibreOffice was started, leave without running them.
+     */
+    if (edit_doc_started()) {
+        fflush(NULL);
+        _Exit(status);   /* C99, <stdlib.h>: skips atexit and static destructors */
+    }
     return status;
 }

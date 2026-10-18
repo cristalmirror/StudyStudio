@@ -330,13 +330,9 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
                 acc_size += produced;
             }
 
-            if (ret == LZMA_STREAM_END) break;
+            /* LZMA_STREAM_END or any error (a truncated file gives
+             * LZMA_BUF_ERROR): stop and keep ret */
             if (ret != LZMA_OK) break;
-
-            /* Safety cutoff: EOF, no bytes pending and no progress ->
-            * the file is truncated and will never reach LZMA_STREAM_END. */
-            if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_BUF_SIZE)
-    break;
 
     } while (1);
 
@@ -359,20 +355,27 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
         }
+        if (ret == LZMA_BUF_ERROR) {
+            subject_log("Error: %s is truncated (unexpected end of file)\n", path);
+            return -10;
+        }
         subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
         return -8;
     }
 
-    *out_buf = acc;
-    *out_size = acc_size;
     /* implementation of Windows directory factory and decompress result. */
     char dest_dir[MAX_PATH];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_windows_buffer(self, acc, acc_size, dest_dir) != 0) {
+        free(acc);   /* the caller only owns the buffer when we return 0 */
         fprintf(stderr, "failed to unpack %s\n", path);
         subject_log("Error: could not extract %s\n", path);
         return -9;
     }
+
+    /* everything went fine: only now the buffer goes to the caller */
+    *out_buf = acc;
+    *out_size = acc_size;
     subject_log("Subject loaded: %s (%lu bytes) into %s\n", path, (unsigned long)acc_size, dest_dir);
     return 0;
 
@@ -780,6 +783,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
        * Child process: execute `tar -cf - -C <parent_of_dir> <basename>`.
        * Redirect its standard output to the write end of the pipe.
        */
+        signal(SIGPIPE, SIG_DFL);   /* main() ignores it: see _unpack_tar_buffer */
         close(pipefd[0]);
         if (dup2(pipefd[1], STDOUT_FILENO) == -1) self->fatal("dup2");
         close(pipefd[1]);
@@ -1004,15 +1008,28 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
         return -1;
     }    
 
+    (void)self;
     int pipefd[2];
-    if (pipe(pipefd) == -1) self->fatal("pipe");
+    if (pipe(pipefd) == -1) {
+        subject_log("pipe failed: %s\n", strerror(errno));
+        return -1;
+    }
 
     pid_t pid = fork();
-    if (pid == -1) self->fatal("fork");
+    if (pid == -1) {
+        subject_log("fork failed: %s\n", strerror(errno));
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
 
     if (pid == 0) {
+        /* main() ignores SIGPIPE; ignored signals survive exec, so give tar
+         * back the default. _exit, not exit/fatal: the child must not run
+         * the parent's atexit handlers (GTK, LibreOffice...). */
+        signal(SIGPIPE, SIG_DFL);
         close(pipefd[1]);
-        if (dup2(pipefd[0], STDIN_FILENO) == -1) self->fatal("dup2");
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) _exit(127);
         close(pipefd[0]);
         execlp("tar","tar","-xf","-","-C", dest_dir,(char *) NULL);
         perror("execlp tar -xf");
@@ -1020,29 +1037,32 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
     }
 
     close(pipefd[0]);
+    int rc = 0;
     size_t written = 0;
     while (written < size) {
-        /* code */
         ssize_t w = write(pipefd[1], buf + written, size - written);
         if (w == -1) {
             if (errno == EINTR) continue;
+            /* EPIPE: tar is gone (not installed, or it rejected the data) */
             fprintf(stderr, "write to tar pipe failed: %s\n", strerror(errno));
             subject_log("write to tar pipe failed: %s\n", strerror(errno));
-            close(pipefd[1]);
-            return -1;
+            rc = -1;
+            break;   /* don't return yet: the child must be reaped */
         }
         written += (size_t)w;
     }
-    close(pipefd[1]);
+    close(pipefd[1]);   /* EOF for tar */
 
     int status;
-    if (waitpid(pid, &status, 0) == -1) {
+    while (waitpid(pid, &status, 0) == -1) {
+        if (errno == EINTR) continue;
         fprintf(stderr,"waitpid failed: %s\n", strerror(errno));
         subject_log("waitpid failed: %s\n", strerror(errno));
         return -1;
     }
 
-    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) rc = -1;
+    return rc;
 }
 
 /* This function load subject:
@@ -1105,7 +1125,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     }
 
     /* Dynamic Buffer accumulators */
-    uint8_t *acc = LZMA_RUN;
+    uint8_t *acc = NULL;
     size_t acc_size = 0;
     size_t acc_cap = 0;
 
@@ -1154,7 +1174,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
              * more capacity to accumulator (acc).
              */
             if (acc_size + produced > acc_cap) {
-                size_t new_cap = new_cap = acc_cap ? acc_cap * 2 : produced;
+                size_t new_cap = acc_cap ? acc_cap * 2 : produced;
 
                 while (new_cap < acc_size + produced) new_cap *= 2;
                 uint8_t *tmp = realloc(acc, new_cap);
@@ -1169,14 +1189,14 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             acc_size += produced;
         }
 
-        if (ret == LZMA_STREAM_END) {
-            break;
-        } else if (ret == LZMA_OK) {
-            continue; // error
-        }
-        
-        /*if haven't more input and don't produced output and EOF, finish  */
-        if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_CHUNK) break;
+        /*
+         * LZMA_OK: keep going. LZMA_STREAM_END or any error: stop here and
+         * keep ret. Calling lzma_code again after an error never recovers
+         * (it loops forever or replaces the real error with another one).
+         * A truncated file ends here too: with LZMA_FINISH and no progress
+         * liblzma returns LZMA_BUF_ERROR.
+         */
+        if (ret != LZMA_OK) break;
 
     } while (1);
 
@@ -1190,7 +1210,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
      * Error maps to return code
      * "Ah shit, here we go again!!!"
      */
-    if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
+    if (ret != LZMA_STREAM_END) {
         free(acc);
         if (ret == LZMA_MEM_ERROR) {
             subject_log("Error: out of memory while decompressing %s\n", path);
@@ -1204,22 +1224,27 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
         }
+        if (ret == LZMA_BUF_ERROR) {
+            subject_log("Error: %s is truncated (unexpected end of file)\n", path);
+            return -10;
+        }
         subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
         return -8; // error lzma unknown
     }
-
-    *out_buf = acc;
-    *out_size = acc_size;
 
     /* implementation of GNU/Linux directory factory and decompress result. */
     char dest_dir[PATH_MAX];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_tar_buffer(self, acc, acc_size, dest_dir) != 0) {
+        free(acc);   /* the caller only owns the buffer when we return 0 */
         fprintf(stderr, "failed to unpack %s\n", path);
         subject_log("Error: could not extract %s\n", path);
         return -9;
     }
 
+    /* everything went fine: only now the buffer goes to the caller */
+    *out_buf = acc;
+    *out_size = acc_size;
     subject_log("Subject loaded: %s (%zu bytes) into %s\n", path, acc_size, dest_dir);
     return 0;
 }

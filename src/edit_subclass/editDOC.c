@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-13
+ * Last edited: 2026-10-18
  */
 
 /*
@@ -57,6 +57,11 @@ static LibreOfficeKit *_doc_office(void) {
 
 bool edit_doc_available(void) {
     return _doc_office() != NULL;
+}
+
+/* unlike edit_doc_available(), never starts LibreOffice */
+bool edit_doc_started(void) {
+    return s_office != NULL;
 }
 
 static int _doc_open(Edit *self, const char *path) {
