@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+Fixes for the Codex debug audit of 2026-10-18 (ASan/UBSan runner).
+- `src/subject.c` (Linux `_load_subject`): invalid input larger than 64 KiB
+  looped forever (and froze the window), because the decode loop called
+  `lzma_code` again after an error. Both platforms now stop at the first
+  result other than `LZMA_OK` and only accept `LZMA_STREAM_END`. A truncated
+  file returns the new code `-10` (`LZMA_BUF_ERROR`) instead of `-8`; the
+  Windows loop lost its "safety cutoff", which ended with `LZMA_OK` and
+  reported `unknown lzma error (0)`. Also `uint8_t *acc = NULL` (was
+  `LZMA_RUN`) and the doubled `new_cap = new_cap =` assignment.
+- `src/subject.c` (`_load_subject`, both platforms): when extraction failed
+  (`-9`) the decoded buffer was already handed to the caller, which only
+  frees it on `0`, so it leaked. `*out_buf`/`*out_size` are now assigned only
+  on success, and the loader frees its buffer on every error.
+- Linux: a load whose `tar -xf` was missing or exited early killed the whole
+  application with `SIGPIPE`. `main()` ignores `SIGPIPE`; the `tar` children
+  of `_unpack_tar_buffer` and `_save_subject` restore `SIG_DFL`.
+  `_unpack_tar_buffer` returns `-1` instead of calling `fatal()` on
+  `pipe`/`fork` errors, uses `_exit` in the child, and always reaps the
+  child with `waitpid` (retrying `EINTR`), also after a failed `write`.
+- `src/main.c`: `AppState` leaked. It is now tied to the window
+  (`app_state_free`), and gets a `GCancellable` given to every
+  `GtkFileDialog`; `on_window_destroy` cancels it and unregisters the footer
+  logger (`subject_set_logger(NULL, NULL)`). `on_load_dialog_finish` ignores
+  `G_IO_ERROR_CANCELLED`.
+- LibreOffice crashed (SIGSEGV in `desktop_LOKClipboard`, `Unspecified
+  Application Error`) inside `exit()` after an office document was opened.
+  Workaround: new `edit_doc_started()`; if it is true, `main()` leaves with
+  `_Exit(status)`, skipping LibreOffice's static destructors (it leaves its
+  temporary profile behind). Pending: try `office->destroy()` instead.
+
 ### Known Issues
 - `EditPDF` has only been compiled, not run. Pending runtime checks:
   annotations created with Poppler on real PDFs (highlight quads),
@@ -19,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Fedora 40) has no ink annotations nor border width.
 - `EditDOC` is view-only (no keyboard/mouse input yet), targets Writer
   rendering, and has only been compiled, not run. Pending runtime checks:
-  clean exit without `office->destroy()` (it crashed in the spike),
+  the `_Exit` exit workaround and whether `office->destroy()` can replace it,
   `saveAs` over the opened file, and LibreOffice on Windows.
 - The subject menu (`MenuEditKind`) has not been run yet (built for Linux
   and Windows only).

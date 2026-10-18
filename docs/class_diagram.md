@@ -38,6 +38,8 @@ classDiagram
         -on_load_clicked(GtkButton* button, gpointer user_data)$ void
         -on_load_dialog_finish(GObject* source, GAsyncResult* res, gpointer user_data)$ void
         -on_subject_log(const char* msg, void* user_data)$ void
+        -on_window_destroy(GtkWidget* window, gpointer user_data)$ void
+        -app_state_free(gpointer data)$ void
         -activate(GtkApplication* app, gpointer user_data)$ void
         +main(int argc, char* argv[])$ int
     }
@@ -47,6 +49,7 @@ classDiagram
         +GtkWidget* destiny_content
         +GtkWidget* window
         +GtkWidget* footer_label
+        +GCancellable* cancellable
         +int counter
     }
 
@@ -151,6 +154,7 @@ classDiagram
         +const char* edit_doc_suffixes[]$
         +new_edit_doc()$ Edit*
         +edit_doc_available()$ bool
+        +edit_doc_started()$ bool
         +open(const char* path) int
         +save() int
         +render(GtkWidget* container) void
@@ -302,7 +306,7 @@ classDiagram
 
 | From | To | Meaning |
 | --- | --- | --- |
-| `MainGUI` | `AppState` | `activate()` allocates the state and passes it as `user_data` to the callbacks. |
+| `MainGUI` | `AppState` | `activate()` allocates the state, ties it to the window (`app_state_free`) and passes it as `user_data` to the callbacks; `on_window_destroy()` cancels its file dialogs. |
 | `MainGUI` | `SubjectPanel` | `on_add_clicked()` creates one panel per subject and ties it to the subject box with `g_object_set_data_full`; the panel callbacks receive it as `user_data`. |
 | `MainGUI` | `MenuEditKind` | `subject_panel_set_subject()` creates one menu per subject with `new_menu_edit_kind(on_kind_chosen, panel, kinds)`, once the subject exists, and gives its `popover` to the `GtkMenuButton`. |
 | `MainGUI` | `SubjectDialog` | `on_subject_button_activated()` opens it while the panel has no subject; its `on_done` is `on_subject_dialog_done()`, which calls `make_subject()`. |

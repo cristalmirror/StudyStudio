@@ -136,18 +136,19 @@ either, matching the Linux side.
 As of version 0.0.8, Windows has its own native `_load_subject`, functionally
 equivalent to the Linux one for decoding: it decompresses the full `.xz` file into a single
 heap-allocated buffer with `lzma_stream_decoder`, growing the accumulator
-geometrically, and includes a safety exit for a truncated stream that never
-reaches `LZMA_STREAM_END`. It also parses the `length + path + size + content`
+geometrically. It also parses the `length + path + size + content`
 records written by `_save_subject` and writes them to disk
 (`_derive_extract_dir` + `_unpack_windows_buffer`, mirroring the Linux wiring).
 As of version 0.0.14 this path compiles, but it has not been tested at runtime
 (see [Extraction](#extraction) below).
 
-For valid output pointers, output values are initialized to `NULL` and zero before opening the file. On success, the caller owns the returned buffer and must use `free` after consumption. Inputs and path strings remain caller-owned.
+For valid output pointers, output values are initialized to `NULL` and zero before opening the file. They are assigned **only when the whole load succeeds** (`0`): decoding and extraction. On any other result they stay `NULL`/`0` and the loader frees its own buffer, so the caller owns (and must `free`) the buffer only after a `0`. Inputs and path strings remain caller-owned.
+
+The decode loop is the same on both platforms (unified on 2026-10-18): it calls `lzma_code` while it returns `LZMA_OK` and stops at the first other result, keeping it. `LZMA_STREAM_END` is the only success; any error ends the loop at once, because calling `lzma_code` again after an error never recovers (on Linux it used to loop forever on invalid input larger than one 64 KiB chunk, and replaced the real error on smaller inputs). A truncated file also ends the loop: at EOF the loop calls `lzma_code` with `LZMA_FINISH`, and liblzma returns `LZMA_BUF_ERROR` when it cannot make progress.
 
 | Result | Meaning in the current implementation |
 | --- | --- |
-| `0` | Accepted decoding result; output buffer and length are assigned. |
+| `0` | Decoded (`LZMA_STREAM_END`) and extracted; output buffer and length are assigned. |
 | `-1` | Missing path or output pointer. |
 | `-2` | Input file could not be opened. |
 | `-3` | Decoder initialization failed. |
@@ -156,7 +157,8 @@ For valid output pointers, output values are initialized to `NULL` and zero befo
 | `-6` | XZ format error. |
 | `-7` | Data error, also used for an input read failure. |
 | `-8` | Other decoder error. |
-| `-9` | Decoding succeeded, but deriving the extraction directory or unpacking to disk failed. `*out_buf`/`*out_size` are still assigned at this point; the caller still owns a valid decoded buffer even though extraction failed. |
+| `-9` | Decoding succeeded, but deriving the extraction directory or unpacking to disk failed. The decoded buffer is freed by the loader; `*out_buf`/`*out_size` stay `NULL`/`0` (before 2026-10-18 they were assigned, and `main.c` leaked the buffer). |
+| `-10` | Truncated input (`LZMA_BUF_ERROR`): the file ended before the end of the stream. Also returned for a file shorter than an `.xz` header. |
 
 As of version 0.0.14, both implementations report each result through `subject_log` (see [Logging](#logging)):
 
@@ -172,6 +174,7 @@ As of version 0.0.14, both implementations report each result through `subject_l
 | `-7` | `Error: corrupted data in <path>` |
 | `-8` | `Error: unknown lzma error (<code>) in <path>` |
 | `-9` | `Error: could not extract <path>` |
+| `-10` | `Error: <path> is truncated (unexpected end of file)` |
 | `0` | `Subject loaded: <path> (<N> bytes) into <dest_dir>` |
 
 The Windows success message prints the size with `%lu` and an `unsigned long` cast, since the MinGW-w64 `vsnprintf` does not reliably support `%zu`.
@@ -185,6 +188,8 @@ Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolv
 ### Linux: compiles and is wired in
 
 The Linux `_derive_extract_dir` no longer has the defects from the previous review (`strrchr`/`snprintf` typos, missing `static int` return type all fixed) and now reads correctly. A new helper, `_unpack_tar_buffer(self, buf, size, dest_dir)`, `mkdir`s the destination and forks `tar -xf - -C <dest_dir>`, writing the decoded TAR bytes to it through a pipe — the load-side mirror of the existing `tar -cf -` save path. `_load_subject` calls both after a successful decode (see [Loading](#loading)); this is the only extraction path currently expected to compile and run.
+
+`_unpack_tar_buffer` returns `-1` (it never calls `fatal`) when `pipe`, `fork`, the writes or `tar` fail. The child resets `SIGPIPE` to `SIG_DFL` before `execlp` and uses `_exit`, never `exit`, so it does not run the parent's `atexit` handlers. If `tar` is missing or exits early (for example, the data is not a TAR stream), the next `write` fails with `EPIPE` instead of killing the application, because `main()` ignores `SIGPIPE` (see [main.c](main.c.md)); the loop stops, closes the pipe and still reaps the child with `waitpid`, retrying on `EINTR`, so no zombie is left. The `_save_subject` child also resets `SIGPIPE` to `SIG_DFL`.
 
 ### Windows: compiles, not yet tested at runtime
 
@@ -204,13 +209,6 @@ The defects described in earlier versions of this document (the four-argument `s
   button (see [main.c](main.c.md)).
 - The Windows entry format currently records only files, so empty directories
   cannot be restored.
-- Linux only, pre-existing and not previously documented here: in
-  `_load_subject`, `uint8_t *acc = LZMA_RUN;` initializes the decode
-  accumulator with the `lzma_action` enum constant (value `0`) instead of
-  `NULL`. This happens to work because `0` is a valid null pointer constant
-  in C and `LZMA_RUN` is guaranteed to be `0` by the liblzma API, but it is
-  confusing to read and fragile if that guarantee ever changed. It should
-  read `uint8_t *acc = NULL;`.
 - `_make_subject` leaves the folders it already created when a later step
   fails, and the base folder's parent must exist.
 - `MAX_PATH` and `FindFirstFileA` limit Windows paths and do not provide full
@@ -225,15 +223,9 @@ The defects described in earlier versions of this document (the four-argument `s
   consumed it all.
 - Linux only: several save error paths leave the read side of the pipe open;
   some final I/O results are not checked.
-- Linux only: decoder errors are not all handled with an immediate loop exit,
-  and final acceptance includes `LZMA_OK` instead of requiring
-  `LZMA_STREAM_END`. The Windows `_load_subject` requires `LZMA_STREAM_END`
-  strictly.
-- Linux only: `_unpack_tar_buffer` does not ignore `SIGPIPE`. If `tar -xf`
-  exits early (for example, when a valid `.xz` does not contain a TAR stream),
-  the next `write` to the pipe raises `SIGPIPE` and terminates the whole
-  application. On a `write` failure it also returns without `waitpid`,
-  leaving a zombie child.
+- Linux only: `_save_subject` still calls `fatal()` (which terminates the
+  whole application) on `pipe`/`fork`/`fopen` failures, and the child calls
+  it too, running the parent's `atexit` handlers through `exit`.
 - Windows only: `_unpack_windows_buffer` does not reject `relpath` values that
   contain `..` components or are absolute, so a crafted archive can write
   outside `dest_dir`. The `offset + filesize` check can also overflow for very

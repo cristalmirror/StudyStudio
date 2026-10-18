@@ -53,7 +53,7 @@ void subject_set_logger(SubjectLogFunc fn, void *user_data);
 | `fatal(msg)` | Default implementation prints an error and terminates the process. |
 | `read_subject(self)` | Prints `val`; does not load an archive. |
 | `wait_pid_os_opt(self, status)` | Waits for the child; returns `0` on API success or `-1` on API failure. Optional status receives `0` for child success, `1` otherwise. Uses `self->proc_handle` on Windows and `self->pid` elsewhere. |
-| `load_subject(self, path, out_buf, out_size)` | Decodes XZ data into an allocated memory buffer; returns an integer result. See [implementation details](subject.c.md). |
+| `load_subject(self, path, out_buf, out_size)` | Decodes XZ data into an allocated memory buffer and extracts it next to the archive; returns `0` on success or a negative code (`-1` … `-10`, see [subject.c](subject.c.md#loading)). `*out_buf`/`*out_size` are assigned only on `0`; otherwise they stay `NULL`/`0`. |
 | `save_subject(self, msg, dir, outpath)` | Archives a directory and compresses it to the destination. Returns no success/failure value; `msg` is unused on both platforms. |
 | `make_subject(self, base_dir, name, folders)` | Since 0.1.3. Creates `<base_dir>/<name>/` and one subfolder per entry of the NULL-terminated `folders` (may be `NULL`), then sets `name` and `dir`. Returns `0` on success, `-1` on an invalid name, an existing subject or any I/O error (reported through the logger). `name`, `base_dir` and `folders` are borrowed and must be UTF-8. See [subject.c](subject.c.md#making-a-subject). |
 | `close_subject(self)` | Frees `name`, `dir` and the object; accepts `NULL` in the default implementation. |
@@ -66,7 +66,7 @@ Although there is a forward typedef, the full structure is public: consumers can
 
 ## Ownership
 
-The constructor transfers ownership to the caller. Destroy an object once and do not access it afterward. `name` and `dir` belong to the object: copy them if they must outlive it. A successfully returned load buffer belongs to the caller and must be freed separately. Destroying a subject does not wait for a process or release an OS process handle.
+The constructor transfers ownership to the caller. Destroy an object once and do not access it afterward. `name` and `dir` belong to the object: copy them if they must outlive it. A load buffer belongs to the caller only when `load_subject` returned `0`, and must then be freed separately; after any other result there is nothing to free. Destroying a subject does not wait for a process or release an OS process handle.
 
 ## SOLID development direction
 
