@@ -3,13 +3,14 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.2
  * License: GPLv3
- * Last edited: 2026-10-13
+ * Last edited: 2026-10-18
  */
 
 #include <gtk/gtk.h>
 #include "../include/subject.h"
 #include "../include/edit.h"
 #include "../include/msc/menuEditKind.h"
+#include "../include/msc/subjectDialog.h"
 
 /*this structure save the state of application*/
 typedef struct {
@@ -22,6 +23,8 @@ typedef struct {
 /* one per "Materia Num" button: its menu and its editing area */
 typedef struct {
     AppState *state;
+    int number;                    /* the #x of "Materia Num #x" */
+    Subject *subject;              /* NULL until the subject is created */
     GtkWidget *menu_button;        /* the subject button, opens the menu */
     GtkWidget *revealer;           /* shows / hides the editing area */
     GtkWidget *editor_box;         /* where the open Edit renders itself */
@@ -87,6 +90,15 @@ static void on_kind_chosen(const EditKind *kind, gpointer user_data) {
     GtkFileDialog *dialog = gtk_file_dialog_new();
     gtk_file_dialog_set_title(dialog, "Abrir documento");
     gtk_file_dialog_set_default_filter(dialog, filter);
+
+    /* start in the subject's folder of this kind (made by make_subject) */
+    char *kind_dir = g_build_filename(panel->subject->dir, kind->filter_name, NULL);
+    if (g_file_test(kind_dir, G_FILE_TEST_IS_DIR)) {
+        GFile *initial = g_file_new_for_path(kind_dir);
+        gtk_file_dialog_set_initial_folder(dialog, initial);
+        g_object_unref(initial);
+    }
+    g_free(kind_dir);
     gtk_file_dialog_open(dialog, GTK_WINDOW(panel->state->window), NULL,
                          on_open_doc_finish, panel);
     g_object_unref(filter);
@@ -124,6 +136,7 @@ static void on_close_doc_clicked(GtkButton *button, gpointer user_data) {
 static void subject_panel_free(gpointer data) {
     SubjectPanel *panel = (SubjectPanel *)data;
     if (panel->edit != NULL) panel->edit->close(panel->edit);
+    if (panel->subject != NULL) panel->subject->close_subject(panel->subject);
     g_free(panel);
 }
 
@@ -132,6 +145,61 @@ static GtkWidget *panel_button(const char *label, GCallback cb, SubjectPanel *pa
     GtkWidget *button = gtk_button_new_with_label(label);
     g_signal_connect(button, "clicked", cb, panel);
     return button;
+}
+
+/*
+ * The subject exists (created or, later, loaded): the button takes its
+ * name and from now on unfolds the edit menu with the kinds it uses
+ * (kinds NULL: every kind).
+ */
+static void subject_panel_set_subject(SubjectPanel *panel, Subject *subject, const bool *kinds) {
+    GtkMenuButton *button = GTK_MENU_BUTTON(panel->menu_button);
+
+    panel->subject = subject;
+    gtk_menu_button_set_label(button, subject->name);
+    gtk_menu_button_set_create_popup_func(button, NULL, NULL, NULL);   /* no more dialog */
+    Menu *menu = new_menu_edit_kind(on_kind_chosen, panel, kinds);
+    gtk_menu_button_set_popover(button, menu->popover);
+}
+
+/* "Crear" was pressed in the dialog: make the folders on disk */
+static bool on_subject_dialog_done(const char *name, const char *base_dir,
+                                   const bool *chosen, gpointer user_data) {
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+
+    /* one subfolder per chosen kind, NULL-terminated like the suffix lists */
+    const char **folders = g_new0(const char *, edit_kinds_count + 1);
+    size_t n = 0;
+    for (size_t i = 0; i < edit_kinds_count; i++) {
+        if (chosen[i]) folders[n++] = edit_kinds[i].filter_name;
+    }
+
+    Subject *subject = new_subject(panel->number);
+    int rc = (subject != NULL)
+           ? subject->make_subject(subject, base_dir, name, folders)
+           : -1;
+    g_free(folders);
+
+    if (rc != 0) {
+        /* make_subject already wrote the reason in the footer */
+        if (subject != NULL) subject->close_subject(subject);
+        return false;   /* keep the dialog open */
+    }
+    subject_panel_set_subject(panel, subject, chosen);
+    return true;
+}
+
+/*
+ * The subject button was pressed and has no popover yet (subject not
+ * created): GTK asks us for one, we open the dialog instead.
+ */
+static void on_subject_button_activated(GtkMenuButton *button, gpointer user_data) {
+    SubjectPanel *panel = (SubjectPanel *)user_data;
+
+    /* without a popover the button would stay pressed: release it */
+    gtk_menu_button_set_active(button, FALSE);
+    if (panel->subject != NULL) return;
+    new_subject_dialog(GTK_WINDOW(panel->state->window), on_subject_dialog_done, panel);
 }
 
 /*
@@ -146,13 +214,18 @@ static void on_add_clicked(GtkButton *button, gpointer user_data) {
 
     SubjectPanel *panel = g_new0(SubjectPanel, 1);
     panel->state = state;
+    panel->number = state->counter;
 
-    // Make the new element: a button that unfolds the editor menu
+    /*
+     * Make the new element: a menu button WITHOUT popover. Until the
+     * subject exists, clicking it opens the "Nueva materia" dialog;
+     * subject_panel_set_subject() gives it the edit menu afterwards.
+     */
     char *text_label = g_strdup_printf("Materia Num #%d", state->counter);
     panel->menu_button = gtk_menu_button_new();
     gtk_menu_button_set_label(GTK_MENU_BUTTON(panel->menu_button), text_label);
-    Menu *menu = new_menu_edit_kind(on_kind_chosen, panel);
-    gtk_menu_button_set_popover(GTK_MENU_BUTTON(panel->menu_button), menu->popover);
+    gtk_menu_button_set_create_popup_func(GTK_MENU_BUTTON(panel->menu_button),
+                                          on_subject_button_activated, panel, NULL);
     g_free(text_label);
 
     /* toolbar of the open document */

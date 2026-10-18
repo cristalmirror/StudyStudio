@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.2
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-18
  */
 
 /*
@@ -1273,18 +1273,101 @@ static void subject_log(const char *fmt, ...) {
 
     if (buf != stack_buf) free(buf);
 }
+#ifdef _WIN32
+    #define SUBJECT_SEP '\\'
+    #define SUBJECT_PATH_MAX MAX_PATH
+#else
+    #define SUBJECT_SEP '/'
+    #define SUBJECT_PATH_MAX PATH_MAX
+#endif
+
+/*
+ * Creates one folder: 0 created, 1 already existed, -1 error.
+ * GTK gives UTF-8 paths; on Windows CreateDirectoryA would read them in the
+ * ANSI code page and break names like "Física", so we go through UTF-16.
+ */
+static int _mkdir_utf8(const char *path) {
+    #ifdef _WIN32
+        wchar_t wpath[MAX_PATH];
+        if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, MAX_PATH) == 0) return -1;
+        if (CreateDirectoryW(wpath, NULL)) return 0;
+        return (GetLastError() == ERROR_ALREADY_EXISTS) ? 1 : -1;
+    #else
+        if (mkdir(path, 0755) == 0) return 0;
+        return (errno == EEXIST) ? 1 : -1;
+    #endif
+}
+
+/* the name becomes ONE folder: no separators nor characters Windows rejects */
+static bool _is_valid_subject_name(const char *name) {
+    if (name == NULL || name[0] == '\0') return false;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return false;
+    return strpbrk(name, "/\\:*?\"<>|") == NULL;
+}
+
 /* 
  * make the container of all resources necesary to create 
- * a subject (folders, tools, edits, etc).
+ * a subject: <base_dir>/<name>/ with one subfolder per entry of
+ * folders (NULL-terminated). Returns 0 on success, -1 on error.
  */
-void _make_subject(Subject *self) {
+static int _make_subject(Subject *self, const char *base_dir, const char *name,
+                         const char *const *folders) {
+    char path[SUBJECT_PATH_MAX];
+    char sub[SUBJECT_PATH_MAX];
+    int n;
 
+    if (self == NULL || base_dir == NULL) return -1;
+    if (!_is_valid_subject_name(name)) {
+        subject_log("Invalid subject name: '%s'\n", name != NULL ? name : "");
+        return -1;
+    }
 
+    /* 1. base folder (e.g. ~/StudyStudio): it may already exist */
+    if (_mkdir_utf8(base_dir) < 0) {
+        subject_log("Cannot create %s\n", base_dir);
+        return -1;
+    }
+
+    /* 2. subject folder: must be new, never mix two subjects */
+    n = snprintf(path, sizeof(path), "%s%c%s", base_dir, SUBJECT_SEP, name);
+    if (n < 0 || (size_t)n >= sizeof(path)) {
+        subject_log("Path too long for subject '%s'\n", name);
+        return -1;
+    }
+    switch (_mkdir_utf8(path)) {
+        case 0:  break;
+        case 1:  subject_log("Subject already exists: %s\n", path); return -1;
+        default: subject_log("Cannot create %s\n", path);           return -1;
+    }
+
+    /* 3. one subfolder per kind of file */
+    for (size_t i = 0; folders != NULL && folders[i] != NULL; i++) {
+        n = snprintf(sub, sizeof(sub), "%s%c%s", path, SUBJECT_SEP, folders[i]);
+        if (n < 0 || (size_t)n >= sizeof(sub) || _mkdir_utf8(sub) < 0) {
+            subject_log("Cannot create folder '%s' in %s\n", folders[i], path);
+            return -1;
+        }
+    }
+
+    /* 4. remember who we are */
+    free(self->name);
+    free(self->dir);
+    self->name = strdup(name);
+    self->dir = strdup(path);
+    if (self->name == NULL || self->dir == NULL) {
+        subject_log("Out of memory\n");
+        return -1;
+    }
+
+    subject_log("Subject created: %s\n", path);
+    return 0;
 }
 
 /*destructor*/
 void _close_subject(Subject *self) {
     if (self != NULL) {
+        free(self->name);
+        free(self->dir);
         free(self);
     }
 }
@@ -1307,6 +1390,9 @@ Subject *new_subject(int value) {
     new->pid = 0;
     #endif
     new->val = value;
+    new->name = NULL;
+    new->dir = NULL;
+    new->make_subject = _make_subject;
     new->wait_pid_os_opt = _wait_pid_os_opt;
     new->save_subject = _save_subject;
     new->read_subject = _read_subject;
