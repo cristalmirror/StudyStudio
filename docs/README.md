@@ -16,11 +16,12 @@ Each C source/header has its own document. UI resources and build configuration 
 | `include/edit.h`, `src/edit.c` | [Edit base class and editor factory](edit.c.md) |
 | `include/edit_subclass/editTXT.h`, `src/edit_subclass/editTXT.c` | [Plain-text editor (`EditTXT`)](editTXT.c.md) |
 | `include/edit_subclass/editDOC.h`, `src/edit_subclass/editDOC.c` | [LibreOfficeKit office editor (`EditDOC`)](editDOC.c.md) |
+| `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c` | [PDF viewer and annotator (`EditPDF`)](editPDF.c.md) |
 | `include/menu.h`, `src/menu.c`, `include/msc/menuEditKind.h`, `src/msc/menuEditKind.c` | [Menu base class and the subject menu (`MenuEditKind`)](menu.c.md) |
 | `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c` | ["Nueva materia" dialog (`SubjectDialog`)](subjectDialog.c.md) |
 | `include/third_party/LibreOfficeKit/` | Vendored, patched LibreOfficeKit headers (see [editDOC.c](editDOC.c.md#vendored-headers)) |
 | — | [Class diagram](class_diagram.md) |
-| `resources.c` | [Generated resource source](resources.c.md) |
+| `build/resources.c` (generated) | [Generated resource source](resources.c.md) |
 | `interface.ui` | [GTK interface definition](interface.ui.md) |
 | `resources.xml` | [Resource manifest](resources.xml.md) |
 | `Makefile` | [Build rules](Makefile.md) |

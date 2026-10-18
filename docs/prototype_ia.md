@@ -1,5 +1,7 @@
 # AI Prototype — Work session (2026-09-20)
 
+Historical session log. Version numbers, commands, code samples, and pending tasks below describe their respective session dates, not the current release. For version 0.1.3, use the [repository README](../README.md), the [current documentation](README.md), and the [changelog](../CHANGELOG.md).
+
 Log of an AI-assisted work session (Claude Code) on StudyStudio. Covers adding GDB debugging support to the `Makefile`, the associated documentation, and the analysis + design of real unpacking for `_load_subject`. The code in that last part was **designed by the AI but is still pending manual implementation** by the user, following this project's collaboration mode (the AI reviews/diagnoses/generates reference code; the user types it by hand to understand the code's structure).
 
 ---
