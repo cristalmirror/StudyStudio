@@ -1,4 +1,4 @@
-NAME      := studystudio-0.1.0
+NAME      := studystudio-0.1.2
 SRC_DIR   := src
 INCLUDE_DIR := include
 BUILD_DIR := build
@@ -8,13 +8,14 @@ RESOURCE_SRC := $(BUILD_DIR)/resources.c
 # 1. Linux compilation
 # ==========================================
 CC_LINUX  := gcc
-GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4)
-GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4)
+# poppler-glib: PDF rendering/annotations for EditPDF (GPLv2+, GPLv3-compatible)
+GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4 poppler-glib)
+GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4 poppler-glib)
 
 INCLUDES := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/third_party
 
 CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
-LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -larchive -llzma
+LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -larchive -llzma -lm
 
 # --- Debug variant (unoptimized, with symbols for GDB) ---
 CFLAGS_LINUX_DEBUG := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_LINUX)
@@ -25,21 +26,21 @@ CFLAGS_LINUX_DEBUG := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_LINU
 CC_WIN64  := x86_64-w64-mingw32-gcc
 MINGW_PKG_PATH := /usr/x86_64-w64-mingw32/sys-root/mingw/lib/pkgconfig
 
-GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk4)
-GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4)
+GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk4 poppler-glib)
+GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4 poppler-glib)
 
 CFLAGS_WIN  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
-LDFLAGS_WIN := $(GTK_LIBS_WIN) -larchive -llzma -mwindows -static-libgcc
+LDFLAGS_WIN := $(GTK_LIBS_WIN) -larchive -llzma -lm -mwindows -static-libgcc
 
 # --- Debug variant (unoptimized, with symbols) ---
 CFLAGS_WIN_DEBUG  := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_WIN)
-LDFLAGS_WIN_DEBUG := $(GTK_LIBS_WIN) -larchive -llzma -static-libgcc
+LDFLAGS_WIN_DEBUG := $(GTK_LIBS_WIN) -larchive -llzma -lm -static-libgcc
 
 # ==========================================
 # Source files
 # ==========================================
-SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c)
-HEADERS := $(wildcard $(INCLUDE_DIR)/.h)
+SRCS := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/edit_subclass/*.c) $(wildcard $(SRC_DIR)/msc/*.c)
+HEADERS := $(wildcard $(INCLUDE_DIR)/*.h)
 
 OBJS_LINUX := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/linux/%.o) $(BUILD_DIR)/linux/resources.o
 OBJS_WIN64 := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64/%.o) $(BUILD_DIR)/win64/resources.o
