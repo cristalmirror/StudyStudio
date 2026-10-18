@@ -1,6 +1,6 @@
 # `include/edit.h` and `src/edit.c`
 
-Status: draft for user approval; version 0.1.0.
+Status: draft for user approval; version 0.1.2.
 
 ## Purpose and dependencies
 
@@ -48,10 +48,32 @@ It then calls `open()`. If opening fails, the editor is destroyed with
 `close()` and the factory returns `NULL`, so callers get either a fully
 opened editor or nothing.
 
-The same lists feed the file-dialog filters of the subject menu in
-[main.c](main.c.md), so each format is declared once, next to its editor.
-The menu does not use the factory: the user picks the editor kind, and
-`main.c` calls that kind's constructor directly.
+The same lists feed the file-dialog filters of the subject menu through
+`edit_kinds[]` (see below), so each format is declared once, next to its
+editor. The menu does not use the factory: the user picks the editor kind,
+and `main.c` calls that kind's constructor directly.
+
+## Editor kinds
+
+`EditKind` describes one `Edit` subclass, independently of any widget. Since
+0.1.1 it lives here instead of `main.c` (where it was `EditorKind`), so menus
+and other consumers can share it.
+
+| Field | Description |
+| --- | --- |
+| `label` | Text of the menu entry. |
+| `filter_name` | Name shown in the file dialog filter. |
+| `suffixes` | The subclass's suffix list; `NULL` means the editor is not implemented yet. |
+| `create` | Subclass constructor (`new_edit_txt`, `new_edit_doc`, `new_edit_pdf`). |
+| `available` | Optional runtime check (`edit_doc_available`); `NULL` means always available. |
+
+`edit_kinds[]` has one row per kind: text, office document, PDF (`EditPDF`,
+see [editPDF.c](editPDF.c.md)) and the UML placeholder (`suffixes == NULL`,
+shown greyed out as "(próximamente)").
+Adding an editor means adding a row. Outside `edit.c` the array is declared
+`extern const EditKind edit_kinds[];`, an incomplete type whose size the
+compiler does not know, so `G_N_ELEMENTS` cannot be used there: the size is
+exported as `edit_kinds_count`, computed in `edit.c`.
 
 ## Limitations
 

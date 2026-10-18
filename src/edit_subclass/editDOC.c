@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.0
+ * Version: 0.1.2
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-13
  */
 
 /*
@@ -96,8 +96,7 @@ static int _doc_save(Edit *self) {
 }
 
 /* Paints only the visible part: LOK renders any rectangle of the document. */
-static void _doc_draw(GtkDrawingArea *area, cairo_t *cr,
-                      int width, int height, gpointer user_data) {
+static void _doc_draw(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer user_data) {
     EditDOC *doc = user_data;
     (void)area;
     if (doc->lok == NULL || doc->width_twips <= 0) return;
@@ -105,8 +104,7 @@ static void _doc_draw(GtkDrawingArea *area, cairo_t *cr,
     double zoom = (double)width / doc->width_twips;   /* fit width: px per twip */
     double top = gtk_adjustment_get_value(doc->vadj); /* px scrolled */
 
-    cairo_surface_t *surface =
-        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
     if (cairo_image_surface_get_stride(surface) != width * 4) {
         cairo_surface_destroy(surface);
         return;
@@ -127,16 +125,13 @@ static void _doc_draw(GtkDrawingArea *area, cairo_t *cr,
 }
 
 /* The scroll range depends on the width, because of the fit-to-width zoom. */
-static void _doc_on_resize(GtkDrawingArea *area, int width, int height,
-                           gpointer user_data) {
+static void _doc_on_resize(GtkDrawingArea *area, int width, int height, gpointer user_data) {
     EditDOC *doc = user_data;
     (void)area;
     if (width <= 0 || doc->width_twips <= 0) return;
 
     double doc_height = doc->height_twips * (double)width / doc->width_twips;
-    gtk_adjustment_configure(doc->vadj, gtk_adjustment_get_value(doc->vadj),
-                             0, doc_height,            /* lower, upper */
-                             height * 0.1, height * 0.9, height);
+    gtk_adjustment_configure(doc->vadj, gtk_adjustment_get_value(doc->vadj),0, doc_height,/*->lower, upper*/ height * 0.1, height * 0.9, height);
 }
 
 static void _doc_on_scrolled(GtkAdjustment *adj, gpointer user_data) {
