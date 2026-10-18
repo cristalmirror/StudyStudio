@@ -97,6 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `new_menu_edit_kind(on_chosen, user_data, enabled)`: the new `enabled`
   array hides the kinds a subject does not use (`NULL` shows them all).
 - `_close_subject` frees `name` and `dir`; `new_subject` sets them to `NULL`.
+- Bumped the project version to `0.1.3`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field of every file header, the "Status" /
+  baseline version lines and binary names across `docs/*.md`, and the commit
+  example in `CLAUDE.md`.
 
 ## [0.1.2] - 2026-10-16
 

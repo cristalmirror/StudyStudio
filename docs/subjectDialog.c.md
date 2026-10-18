@@ -1,6 +1,6 @@
 # `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c`
 
-Status: draft for user approval; version 0.1.2. Compiled, not run yet.
+Status: draft for user approval; version 0.1.3. Compiled, not run yet.
 
 ## Purpose and dependencies
 
