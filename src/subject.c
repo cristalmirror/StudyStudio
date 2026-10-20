@@ -1211,26 +1211,30 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
      * "Ah shit, here we go again!!!"
      */
     if (ret != LZMA_STREAM_END) {
-        free(acc);
-        if (ret == LZMA_MEM_ERROR) {
+    free(acc);
+
+        switch (ret) {
+        case LZMA_MEM_ERROR:
             subject_log("Error: out of memory while decompressing %s\n", path);
             return -5;
-        }
-        if (ret == LZMA_FORMAT_ERROR) {
+
+        case LZMA_FORMAT_ERROR:
             subject_log("Error: %s is not a valid .xz file\n", path);
             return -6;
-        }
-        if (ret == LZMA_DATA_ERROR) {
+
+        case LZMA_DATA_ERROR:
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
-        }
-        if (ret == LZMA_BUF_ERROR) {
+
+        case LZMA_BUF_ERROR:
             subject_log("Error: %s is truncated (unexpected end of file)\n", path);
             return -10;
-        }
-        subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
-        return -8; // error lzma unknown
+
+        default:
+            subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
+            return -8; // error lzma unknown
     }
+}
 
     /* implementation of GNU/Linux directory factory and decompress result. */
     char dest_dir[PATH_MAX];
