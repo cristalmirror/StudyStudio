@@ -1,6 +1,6 @@
 # `include/edit_subclass/editPDF.h` and `src/edit_subclass/editPDF.c`
 
-Status: draft for user approval; version 0.1.2. Compiled, not run yet.
+Status: draft for user approval; version 0.1.3. Compiled, not run yet.
 
 ## Purpose
 

@@ -1,6 +1,6 @@
 # `include/edit_subclass/editTXT.h` and `src/edit_subclass/editTXT.c`
 
-Status: draft for user approval; version 0.1.2.
+Status: draft for user approval; version 0.1.3.
 
 ## Purpose
 

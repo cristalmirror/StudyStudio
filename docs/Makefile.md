@@ -1,19 +1,19 @@
 # `Makefile`
 
-Status: draft for user approval; version 0.1.2.
+Status: draft for user approval; version 0.1.3.
 
 ## Purpose
 
-Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.1.2`.
+Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.1.3`.
 
 | Target | Behavior |
 | --- | --- |
 | `all` | Requests both Linux and Windows builds; default target. |
-| `linux` | Builds `build/studystudio-0.1.2_linux` with GCC. |
-| `win64` | Builds `build/studystudio-0.1.2_win64.exe` with MinGW-w64. |
-| `debug` | Builds `build/studystudio-0.1.2_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
+| `linux` | Builds `build/studystudio-0.1.3_linux` with GCC. |
+| `win64` | Builds `build/studystudio-0.1.3_win64.exe` with MinGW-w64. |
+| `debug` | Builds `build/studystudio-0.1.3_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
-| `win64-debug` | Builds `build/studystudio-0.1.2_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
+| `win64-debug` | Builds `build/studystudio-0.1.3_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
 | `setup` | Creates platform object directories, including both debug ones. |
 | `clean` | Empties the contents of `build` and removes the root-level `resources.c`, leaving the `build` directory itself in place. |
 
@@ -27,7 +27,7 @@ The `debug` target reuses the same source discovery and GTK4/liblzma linking as 
 
 Use `make linux`, `make win64`, or `make all` inside an environment with the required tools and libraries. These are configured build targets, not evidence that both platforms currently compile successfully. `make debug`/`make gdb`/`make win64-debug` have the same toolchain requirement as `linux`/`win64`; see [README.md's GDB debugging section](../README.md#-debugging-with-gdb) for the recommended Docker-build/host-debug workflow. `win64-debug` has no `gdb`-equivalent shortcut, since cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up.
 
-Since 0.1.0 (in development) `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryA` (kernel32, always linked by MinGW). Since 0.1.1 `SRCS` also discovers `src/msc/*.c` (menu subclasses); the object rules already create `build/<target>/msc/` with `@mkdir -p $(@D)`. Since 0.1.2, the `pkgconf` calls for both targets ask for `gtk4 poppler-glib`, so `GTK_CFLAGS_*` / `GTK_LIBS_*` carry the Poppler flags used by `EditPDF`, and the link flags add `-lm` (`editPDF.c` uses `ceil`, `lround` and `fabs` from `<math.h>`).
+Since 0.1.0 `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryA` (kernel32, always linked by MinGW). Since 0.1.1 `SRCS` also discovers `src/msc/*.c` (menu subclasses); the object rules already create `build/<target>/msc/` with `@mkdir -p $(@D)`. Since 0.1.2, the `pkgconf` calls for both targets ask for `gtk4 poppler-glib`, so `GTK_CFLAGS_*` / `GTK_LIBS_*` carry the Poppler flags used by `EditPDF`, and the link flags add `-lm` (`editPDF.c` uses `ceil`, `lround` and `fabs` from `<math.h>`).
 
 ## Current limitations
 

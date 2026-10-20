@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-18
  */
 
 /*
@@ -330,13 +330,9 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
                 acc_size += produced;
             }
 
-            if (ret == LZMA_STREAM_END) break;
+            /* LZMA_STREAM_END or any error (a truncated file gives
+             * LZMA_BUF_ERROR): stop and keep ret */
             if (ret != LZMA_OK) break;
-
-            /* Safety cutoff: EOF, no bytes pending and no progress ->
-            * the file is truncated and will never reach LZMA_STREAM_END. */
-            if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_BUF_SIZE)
-    break;
 
     } while (1);
 
@@ -359,20 +355,27 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
         }
+        if (ret == LZMA_BUF_ERROR) {
+            subject_log("Error: %s is truncated (unexpected end of file)\n", path);
+            return -10;
+        }
         subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
         return -8;
     }
 
-    *out_buf = acc;
-    *out_size = acc_size;
     /* implementation of Windows directory factory and decompress result. */
     char dest_dir[MAX_PATH];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_windows_buffer(self, acc, acc_size, dest_dir) != 0) {
+        free(acc);   /* the caller only owns the buffer when we return 0 */
         fprintf(stderr, "failed to unpack %s\n", path);
         subject_log("Error: could not extract %s\n", path);
         return -9;
     }
+
+    /* everything went fine: only now the buffer goes to the caller */
+    *out_buf = acc;
+    *out_size = acc_size;
     subject_log("Subject loaded: %s (%lu bytes) into %s\n", path, (unsigned long)acc_size, dest_dir);
     return 0;
 
@@ -780,6 +783,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
        * Child process: execute `tar -cf - -C <parent_of_dir> <basename>`.
        * Redirect its standard output to the write end of the pipe.
        */
+        signal(SIGPIPE, SIG_DFL);   /* main() ignores it: see _unpack_tar_buffer */
         close(pipefd[0]);
         if (dup2(pipefd[1], STDOUT_FILENO) == -1) self->fatal("dup2");
         close(pipefd[1]);
@@ -1004,15 +1008,28 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
         return -1;
     }    
 
+    (void)self;
     int pipefd[2];
-    if (pipe(pipefd) == -1) self->fatal("pipe");
+    if (pipe(pipefd) == -1) {
+        subject_log("pipe failed: %s\n", strerror(errno));
+        return -1;
+    }
 
     pid_t pid = fork();
-    if (pid == -1) self->fatal("fork");
+    if (pid == -1) {
+        subject_log("fork failed: %s\n", strerror(errno));
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
 
     if (pid == 0) {
+        /* main() ignores SIGPIPE; ignored signals survive exec, so give tar
+         * back the default. _exit, not exit/fatal: the child must not run
+         * the parent's atexit handlers (GTK, LibreOffice...). */
+        signal(SIGPIPE, SIG_DFL);
         close(pipefd[1]);
-        if (dup2(pipefd[0], STDIN_FILENO) == -1) self->fatal("dup2");
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) _exit(127);
         close(pipefd[0]);
         execlp("tar","tar","-xf","-","-C", dest_dir,(char *) NULL);
         perror("execlp tar -xf");
@@ -1020,29 +1037,32 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
     }
 
     close(pipefd[0]);
+    int rc = 0;
     size_t written = 0;
     while (written < size) {
-        /* code */
         ssize_t w = write(pipefd[1], buf + written, size - written);
         if (w == -1) {
             if (errno == EINTR) continue;
+            /* EPIPE: tar is gone (not installed, or it rejected the data) */
             fprintf(stderr, "write to tar pipe failed: %s\n", strerror(errno));
             subject_log("write to tar pipe failed: %s\n", strerror(errno));
-            close(pipefd[1]);
-            return -1;
+            rc = -1;
+            break;   /* don't return yet: the child must be reaped */
         }
         written += (size_t)w;
     }
-    close(pipefd[1]);
+    close(pipefd[1]);   /* EOF for tar */
 
     int status;
-    if (waitpid(pid, &status, 0) == -1) {
+    while (waitpid(pid, &status, 0) == -1) {
+        if (errno == EINTR) continue;
         fprintf(stderr,"waitpid failed: %s\n", strerror(errno));
         subject_log("waitpid failed: %s\n", strerror(errno));
         return -1;
     }
 
-    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) rc = -1;
+    return rc;
 }
 
 /* This function load subject:
@@ -1105,7 +1125,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     }
 
     /* Dynamic Buffer accumulators */
-    uint8_t *acc = LZMA_RUN;
+    uint8_t *acc = NULL;
     size_t acc_size = 0;
     size_t acc_cap = 0;
 
@@ -1154,7 +1174,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
              * more capacity to accumulator (acc).
              */
             if (acc_size + produced > acc_cap) {
-                size_t new_cap = new_cap = acc_cap ? acc_cap * 2 : produced;
+                size_t new_cap = acc_cap ? acc_cap * 2 : produced;
 
                 while (new_cap < acc_size + produced) new_cap *= 2;
                 uint8_t *tmp = realloc(acc, new_cap);
@@ -1169,14 +1189,14 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             acc_size += produced;
         }
 
-        if (ret == LZMA_STREAM_END) {
-            break;
-        } else if (ret == LZMA_OK) {
-            continue; // error
-        }
-        
-        /*if haven't more input and don't produced output and EOF, finish  */
-        if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_CHUNK) break;
+        /*
+         * LZMA_OK: keep going. LZMA_STREAM_END or any error: stop here and
+         * keep ret. Calling lzma_code again after an error never recovers
+         * (it loops forever or replaces the real error with another one).
+         * A truncated file ends here too: with LZMA_FINISH and no progress
+         * liblzma returns LZMA_BUF_ERROR.
+         */
+        if (ret != LZMA_OK) break;
 
     } while (1);
 
@@ -1190,36 +1210,45 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
      * Error maps to return code
      * "Ah shit, here we go again!!!"
      */
-    if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
-        free(acc);
-        if (ret == LZMA_MEM_ERROR) {
+    if (ret != LZMA_STREAM_END) {
+    free(acc);
+
+        switch (ret) {
+        case LZMA_MEM_ERROR:
             subject_log("Error: out of memory while decompressing %s\n", path);
             return -5;
-        }
-        if (ret == LZMA_FORMAT_ERROR) {
+
+        case LZMA_FORMAT_ERROR:
             subject_log("Error: %s is not a valid .xz file\n", path);
             return -6;
-        }
-        if (ret == LZMA_DATA_ERROR) {
+
+        case LZMA_DATA_ERROR:
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
-        }
-        subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
-        return -8; // error lzma unknown
-    }
 
-    *out_buf = acc;
-    *out_size = acc_size;
+        case LZMA_BUF_ERROR:
+            subject_log("Error: %s is truncated (unexpected end of file)\n", path);
+            return -10;
+
+        default:
+            subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
+            return -8; // error lzma unknown
+    }
+}
 
     /* implementation of GNU/Linux directory factory and decompress result. */
     char dest_dir[PATH_MAX];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_tar_buffer(self, acc, acc_size, dest_dir) != 0) {
+        free(acc);   /* the caller only owns the buffer when we return 0 */
         fprintf(stderr, "failed to unpack %s\n", path);
         subject_log("Error: could not extract %s\n", path);
         return -9;
     }
 
+    /* everything went fine: only now the buffer goes to the caller */
+    *out_buf = acc;
+    *out_size = acc_size;
     subject_log("Subject loaded: %s (%zu bytes) into %s\n", path, acc_size, dest_dir);
     return 0;
 }
@@ -1273,18 +1302,101 @@ static void subject_log(const char *fmt, ...) {
 
     if (buf != stack_buf) free(buf);
 }
+#ifdef _WIN32
+    #define SUBJECT_SEP '\\'
+    #define SUBJECT_PATH_MAX MAX_PATH
+#else
+    #define SUBJECT_SEP '/'
+    #define SUBJECT_PATH_MAX PATH_MAX
+#endif
+
+/*
+ * Creates one folder: 0 created, 1 already existed, -1 error.
+ * GTK gives UTF-8 paths; on Windows CreateDirectoryA would read them in the
+ * ANSI code page and break names like "Física", so we go through UTF-16.
+ */
+static int _mkdir_utf8(const char *path) {
+    #ifdef _WIN32
+        wchar_t wpath[MAX_PATH];
+        if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, MAX_PATH) == 0) return -1;
+        if (CreateDirectoryW(wpath, NULL)) return 0;
+        return (GetLastError() == ERROR_ALREADY_EXISTS) ? 1 : -1;
+    #else
+        if (mkdir(path, 0755) == 0) return 0;
+        return (errno == EEXIST) ? 1 : -1;
+    #endif
+}
+
+/* the name becomes ONE folder: no separators nor characters Windows rejects */
+static bool _is_valid_subject_name(const char *name) {
+    if (name == NULL || name[0] == '\0') return false;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return false;
+    return strpbrk(name, "/\\:*?\"<>|") == NULL;
+}
+
 /* 
  * make the container of all resources necesary to create 
- * a subject (folders, tools, edits, etc).
+ * a subject: <base_dir>/<name>/ with one subfolder per entry of
+ * folders (NULL-terminated). Returns 0 on success, -1 on error.
  */
-void _make_subject(Subject *self) {
+static int _make_subject(Subject *self, const char *base_dir, const char *name,
+                         const char *const *folders) {
+    char path[SUBJECT_PATH_MAX];
+    char sub[SUBJECT_PATH_MAX];
+    int n;
 
+    if (self == NULL || base_dir == NULL) return -1;
+    if (!_is_valid_subject_name(name)) {
+        subject_log("Invalid subject name: '%s'\n", name != NULL ? name : "");
+        return -1;
+    }
 
+    /* 1. base folder (e.g. ~/StudyStudio): it may already exist */
+    if (_mkdir_utf8(base_dir) < 0) {
+        subject_log("Cannot create %s\n", base_dir);
+        return -1;
+    }
+
+    /* 2. subject folder: must be new, never mix two subjects */
+    n = snprintf(path, sizeof(path), "%s%c%s", base_dir, SUBJECT_SEP, name);
+    if (n < 0 || (size_t)n >= sizeof(path)) {
+        subject_log("Path too long for subject '%s'\n", name);
+        return -1;
+    }
+    switch (_mkdir_utf8(path)) {
+        case 0:  break;
+        case 1:  subject_log("Subject already exists: %s\n", path); return -1;
+        default: subject_log("Cannot create %s\n", path);           return -1;
+    }
+
+    /* 3. one subfolder per kind of file */
+    for (size_t i = 0; folders != NULL && folders[i] != NULL; i++) {
+        n = snprintf(sub, sizeof(sub), "%s%c%s", path, SUBJECT_SEP, folders[i]);
+        if (n < 0 || (size_t)n >= sizeof(sub) || _mkdir_utf8(sub) < 0) {
+            subject_log("Cannot create folder '%s' in %s\n", folders[i], path);
+            return -1;
+        }
+    }
+
+    /* 4. remember who we are */
+    free(self->name);
+    free(self->dir);
+    self->name = strdup(name);
+    self->dir = strdup(path);
+    if (self->name == NULL || self->dir == NULL) {
+        subject_log("Out of memory\n");
+        return -1;
+    }
+
+    subject_log("Subject created: %s\n", path);
+    return 0;
 }
 
 /*destructor*/
 void _close_subject(Subject *self) {
     if (self != NULL) {
+        free(self->name);
+        free(self->dir);
         free(self);
     }
 }
@@ -1307,6 +1419,9 @@ Subject *new_subject(int value) {
     new->pid = 0;
     #endif
     new->val = value;
+    new->name = NULL;
+    new->dir = NULL;
+    new->make_subject = _make_subject;
     new->wait_pid_os_opt = _wait_pid_os_opt;
     new->save_subject = _save_subject;
     new->read_subject = _read_subject;

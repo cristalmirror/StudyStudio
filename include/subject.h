@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-18
  */
 
 /*
@@ -60,6 +60,8 @@ void subject_set_logger(SubjectLogFunc fn, void *user_data);
 /* Subjects definitions and attributes of objects */
 struct Subject {
     int val;
+    char *name;   /* owned: subject name, NULL until made */
+    char *dir;    /* owned: subject folder, NULL until made */
 
     #ifdef _WIN32
         HANDLE proc_handle;
@@ -75,6 +77,8 @@ struct Subject {
     int (*wait_pid_os_opt)(Subject *self, int *status);
     int (*load_subject)(Subject *self, const char *path, uint8_t **out_buf, size_t *out_size);
     void (*save_subject)(Subject *self, char **msg, const char **dir, const char **outpath);
+    int (*make_subject)(Subject *self, const char *base_dir, const char *name,
+                        const char *const *folders);
     void (*close_subject)(Subject *self);
 };
 

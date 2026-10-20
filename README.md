@@ -2,7 +2,7 @@
 
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
-[![Version](https://img.shields.io/badge/version-0.1.2-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.3-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
@@ -10,7 +10,7 @@
 ---
 
 > [!WARNING]
-> **This project is in early development (v0.1.2).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
+> **This project is in early development (v0.1.3).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
 
 ---
 
@@ -60,10 +60,10 @@ docker run --rm \
     make all
       
 # to run LINUX
-./build/studystudio-0.0.x_linux
+./build/studystudio-0.1.3_linux
 
 #to run WINDOWS
-./build/studystudio-0.0.x_win64.exe
+./build/studystudio-0.1.3_win64.exe
 
 ```
 
@@ -102,7 +102,7 @@ docker run --rm \
 Once the debug binary exists, run GDB directly on the host, the same way you already run the release binary:
 
 ```
-gdb ./build/studystudio-0.0.x_linux_debug
+gdb ./build/studystudio-0.1.3_linux_debug
 ```
 
 Inside GDB:
@@ -118,7 +118,7 @@ There's also a `make gdb` shortcut that rebuilds `debug` and launches GDB in one
 make gdb
 ```
 
-A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.0.x_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
+A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.1.3_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
 
 ## 📂 Project Structure
 ```sh
@@ -132,8 +132,9 @@ StudyStudio/
 │ │ ├── editTXT.c # Plain-text editor (.txt, .md)
 │ │ ├── editDOC.c # Office editor through LibreOfficeKit
 │ │ └── editPDF.c # PDF viewer/annotator through Poppler
-│ └── msc/ # menu subclasses
-│   └── menuEditKind.c # Subject menu: which kind of document to edit
+│ └── msc/ # Subject menus and dialogs
+│   ├── menuEditKind.c # Subject menu: which kind of document to edit
+│   └── subjectDialog.c # New subject dialog
 ├── build/
 │ ├── linux/ # Linux object files (release)
 │ ├── linux-debug/ # Linux object files (debug, for GDB)
