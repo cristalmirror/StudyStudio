@@ -52,8 +52,9 @@ built with `snprintf` into `SUBJECT_PATH_MAX` buffers (`PATH_MAX` /
 (already existed) or `-1` (error). Linux uses `mkdir(path, 0755)`. Windows
 converts the UTF-8 path that GTK gives to UTF-16 with `MultiByteToWideChar`
 and calls `CreateDirectoryW`: `CreateDirectoryA` would read it in the ANSI
-code page and break names such as `Física`. The rest of the Windows code
-(`_win_mkdir_p`, `FindFirstFileA`, `fopen`) still uses ANSI paths.
+code page and break names such as `Física`. Windows save/load also uses UTF-8-aware `g_fopen`, `g_mkdir_with_parents`
+and `g_canonicalize_filename`; directory enumeration uses `FindFirstFileW`
+and `FindNextFileW`, converting native names back to UTF-8 archive entries.
 
 There is no rollback: if a subfolder fails, the folders already created stay
 on disk.
@@ -62,7 +63,7 @@ on disk.
 
 As of version 0.0.14, `subject_set_logger` stores a process-wide `SubjectLogFunc` and its `user_data` (see [subject.h](subject.h.md#logging)). The private `subject_log(fmt, ...)` formats with `vsnprintf` into a 1024-byte stack buffer, retrying with a heap buffer of the exact size when the message is longer (on allocation failure it reports `[log truncated: OOM]`). The result goes to the registered callback, or to `stderr` when none is registered. `subject_log` is forward-declared right after the includes so it can be used by both platform branches before its definition near the end of the file.
 
-Most existing `fprintf(stderr, ...)`/`printf` diagnostics are kept and followed by an equivalent `subject_log` call, so messages reach both the terminal and the GUI. The `perror` calls in child processes created by `fork()` stay on `stderr` only, since the child's copy of the callback cannot update the parent's window. Some parent-side diagnostics are also still terminal-only: the `perror` calls in `_wait_pid_os_opt` (POSIX `waitpid`) and in the Linux `_save_subject` read/write loop, the Linux `lzma_code error` and `tar failed` messages, the `fopen` failure in `_unpack_windows_buffer`, the Windows `Created <path>` success message, and `_fatal`. In `_unpack_windows_buffer`, the `subject_log` calls for `truncated archive: size header` and `truncated archive: content` are placed after the `return -1`, so they are never reached.
+Most existing `fprintf(stderr, ...)`/`printf` diagnostics are kept and followed by an equivalent `subject_log` call, so messages reach both the terminal and the GUI. The `perror` calls in child processes created by `fork()` stay on `stderr` only, since the child's copy of the callback cannot update the parent's window. Some parent-side diagnostics are also still terminal-only: the `perror` calls in `_wait_pid_os_opt` (POSIX `waitpid`) and in the Linux `_save_subject` read/write loop, the Linux `lzma_code error` and `tar failed` messages, the `fopen` failure in `_unpack_windows_buffer`, the Windows `Created <path>` success message, and `_fatal`. The truncated size-header and content errors in `_unpack_windows_buffer` are logged before returning.
 
 `_wait_pid_os_opt` uses `waitpid` on POSIX, retrying interrupted waits, or `WaitForSingleObject` and optionally `GetExitCodeProcess` on Windows. It returns `-1` on API failure and `0` otherwise. When requested, it normalizes child status to `0` for success and `1` for failure.
 
@@ -86,7 +87,7 @@ not depend on `tar`:
 
 1. Opens `*outpath` for writing and initializes an LZMA encoder with preset
    `6 | LZMA_PRESET_EXTREME` and CRC64, same as the Linux path.
-2. Resolves `*dir` to an absolute path with `_fullpath` and splits it into
+2. Resolves `*dir` to an absolute path with `g_canonicalize_filename` and splits it into
    `(parent, base)` at the last `\`, mirroring the Linux `tar -C parent base`
    behavior so the archived paths include the root directory name (a drive
    root such as `C:\Materia1` is handled as a special case).
@@ -103,7 +104,7 @@ not depend on `tar`:
 The private helpers backing this workflow:
 
 - `_walk_directory(self, base_path, rel_prefix, ctx)` recursively enumerates
-  files with `FindFirstFileA` and `FindNextFileA`, calling itself through
+  files with `FindFirstFileW` and `FindNextFileW`, calling itself through
   `self->walk_directory(...)` for subdirectories.
 - `_write_file_entry_to_lzma(...)` serializes one regular file and feeds it to
   the active LZMA encoder through `self->feed_bytes`.
@@ -183,7 +184,7 @@ These return codes describe the current implementation, not a complete or reliab
 
 ## Extraction
 
-Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolving the archive path to an absolute path (`_fullpath` on Windows, `realpath` on Linux), taking its last path component, and dropping everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped. If the archive name has no extension (or only a leading dot, such as `.xz`), nothing is stripped and `dest_dir` equals the archive's own path. On Linux, `mkdir` then fails with `EEXIST`, which is accepted, `tar -C` fails on the file, and `_load_subject` returns `-9`. See [prototype_ia.md](prototype_ia.md) for the full design this is based on.
+Both platforms have `_derive_extract_dir(path, dest_dir, dest_dir_size)`, resolving the archive path to an absolute path (`g_canonicalize_filename` on Windows, `realpath` on Linux), taking its last path component, and dropping everything after the last `.` in that filename to get the extraction directory's name, placed next to the archive. Example: `C:\subjects\math.xz` → `C:\subjects\math`. A double extension such as `math.tar.xz` currently yields `math.tar`, not `math`, since only the last `.` is stripped. If the archive name has no extension (or only a leading dot, such as `.xz`), nothing is stripped and `dest_dir` equals the archive's own path. On Linux, `mkdir` then fails with `EEXIST`, which is accepted, `tar -C` fails on the file, and `_load_subject` returns `-9`. See [prototype_ia.md](prototype_ia.md) for the full design this is based on.
 
 ### Linux: compiles and is wired in
 
@@ -211,8 +212,8 @@ The defects described in earlier versions of this document (the four-argument `s
   cannot be restored.
 - `_make_subject` leaves the folders it already created when a later step
   fails, and the base folder's parent must exist.
-- `MAX_PATH` and `FindFirstFileA` limit Windows paths and do not provide full
-  Unicode-path support.
+- Fixed-size `MAX_PATH` buffers still limit Windows path lengths, although
+  file access and directory enumeration now support Unicode paths.
 - Windows only: `_save_subject`'s parent/basename split does not handle a
   source directory that already ends with a trailing backslash, and a bare
   drive root (e.g. `*dir` equal to `C:\` itself, with nothing after it) is

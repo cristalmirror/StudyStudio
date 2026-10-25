@@ -39,33 +39,43 @@ The project showcases:
 
 ---
 
-## Compilation 
+## Compilation
 
-```
-cd ~/StudyStudio
+The current source version is **0.1.3**, defined by `VERSION` in the Makefile
+and displayed in the XML window title. The Windows runtime package includes
+GTK and Poppler DLLs; LibreOffice remains a separate installation.
 
+Run from the repository root on Linux. Docker provides GTK, Poppler and the
+MinGW Windows dependencies; plain `make` on a host without them will fail.
+
+```bash
 docker build -t studystudio-builder .
-
-mkdir -p build
-
 docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -v "$(pwd)/src:/usr/src/app/src" \
-    -v "$(pwd)/include:/usr/src/app/include" \
-    -v "$(pwd)/build:/usr/src/app/build" \
-    -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
-    -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
-    -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
-    studystudio-builder \
-    make all
-      
-# to run LINUX
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/usr/src/app \
+  -w /usr/src/app \
+  studystudio-builder make all
+
+# Run the Linux binary on Linux.
 ./build/studystudio-0.1.3_linux
-
-#to run WINDOWS
-./build/studystudio-0.1.3_win64.exe
-
 ```
+
+To distribute Windows, additionally assemble the executable and its DLLs:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/usr/src/app \
+  -w /usr/src/app \
+  studystudio-builder make win64-package
+```
+
+Copy the entire `build/studystudio-0.1.3_windows/` folder to Windows and run
+its `.exe`. `make all` alone does not gather DLLs. Install 64-bit LibreOffice
+separately for office documents. Packaging requires a fresh destination;
+set `WIN64_PACKAGE_DIR=build/windows-new` to use another folder.
+See [Windows packaging and runtime checks](docs/windows.md) for ZIP commands,
+troubleshooting and the remaining Windows checks. Rebuild and repackage after source changes to refresh existing binaries and ZIPs.
 
 ## 🐞 Debugging with GDB
 

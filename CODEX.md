@@ -52,3 +52,9 @@ Codex actúa como asistente de investigación, revisión y diagnóstico para est
 ## Comunicación
 
 Responder en español, de forma clara y práctica. Priorizar la explicación del error, la evidencia necesaria, la documentación pertinente y los pasos para corregirlo. Mantener al desarrollador como responsable de aplicar cambios y ejecutar las comprobaciones, salvo autorización expresa en sentido contrario.
+
+## Comentarios y documentación del código
+
+- Escribir los comentarios, anotaciones explicativas y docstrings del código en inglés.
+- Explicar el propósito de cada bloque y la sintaxis que pueda resultar nueva, teniendo en cuenta que el desarrollador está aprendiendo Python. Mantener las explicaciones claras y cercanas al código correspondiente.
+- Mantener una indentación consistente; en Python, usar cuatro espacios por nivel.

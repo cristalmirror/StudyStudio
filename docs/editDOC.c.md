@@ -17,13 +17,19 @@ these two files.**
 - **Build time:** only the LOK headers, vendored in
   `include/third_party/LibreOfficeKit/` (see [below](#vendored-headers)).
   Nothing is linked: `lok_init()` loads LibreOffice with `dlopen` (Linux) or
-  `LoadLibraryA` (Windows) at run time.
+  `LoadLibraryExW` (Windows) at run time.
 - **Run time:** an installed LibreOffice. `_doc_office()` tries, in order, the
   `STUDYSTUDIO_LO_PATH` environment variable and then:
   - Linux: `/usr/lib64/libreoffice/program` (Fedora),
     `/usr/lib/libreoffice/program` (Debian, Ubuntu),
     `/opt/libreoffice/program`;
   - Windows: `C:\Program Files\LibreOffice\program`.
+
+On Windows, the vendored loader converts UTF-8 paths to UTF-16 and uses
+`LOAD_WITH_ALTERED_SEARCH_PATH` to resolve dependencies beside the loaded DLL.
+Its path checks and process `PATH` update also use wide Windows APIs. A configured
+`STUDYSTUDIO_LO_PATH` is made absolute before initialization. LibreOffice is not
+included in the Windows package; its runtime checks remain pending.
 
 `editDOC.h` only forward-declares `LibreOfficeKitDocument`, so `edit.c` and
 `main.c` do not see the LOK headers. `editDOC.c` defines

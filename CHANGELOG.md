@@ -9,8 +9,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+
+- Implement CSS custom styles for widgets
+- Add `GtkListView` / `GtkColumnView` for high-performance lists
+- Support for modal dialogs and secondary windows
+- Unit tests with GLib Testing Framework
+- Internal API documentation
+- Complete functional testing for both Linux and Windows builds
+- User documentation and `README.md` improvements
+
+## [0.1.3] - 2026-10-25
+
+### Added
+
+- `make win64-package` and CI artifacts containing the Windows executable,
+  MinGW runtime DLLs (including Poppler dependencies), GTK data and notices.
+- Windows runtime checklist in `docs/windows.md`.
+- `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c`: `SubjectDialog`,
+  the modal "Nueva materia" window (a `GtkWindow`, since `GtkDialog` is
+  deprecated in GTK 4.10). Asks for the subject name, its location (default
+  `~/StudyStudio`, changeable with an asynchronous folder chooser) and one
+  check per `EditKind`; validates that the name is not empty and that at
+  least one kind is ticked, and reports the result through a
+  `SubjectDialogDone` callback that decides whether the window closes (see
+  `docs/subjectDialog.c.md`).
+- `Subject.make_subject(self, base_dir, name, folders)` (`_make_subject` in
+  `src/subject.c`): creates `<base_dir>/<name>/` plus one subfolder per entry
+  of the NULL-terminated `folders`, refuses invalid names and existing
+  subjects, and stores the owned `Subject.name` / `Subject.dir`. Folders are
+  created with `mkdir` on Linux and `CreateDirectoryW` (UTF-8 → UTF-16) on
+  Windows, so accented names work.
+- `docs/subjectDialog.c.md`.
+
+### Changed
+
+- Documented Docker packaging commands, ZIP creation, non-root packaging fixes
+  and the distinction between packaging checks and pending Windows runtime checks.
+- `src/main.c`: the "Materia Num #x" button starts without a popover and
+  opens `SubjectDialog` through `gtk_menu_button_set_create_popup_func`.
+  Once the subject is created, `subject_panel_set_subject` renames the button
+  after the subject and gives it the edit menu. `SubjectPanel` gains
+  `number` and the owned `subject`; the file dialog of a kind starts in the
+  subject's folder for that kind.
+- `new_menu_edit_kind(on_chosen, user_data, enabled)`: the new `enabled`
+  array hides the kinds a subject does not use (`NULL` shows them all).
+- `_close_subject` frees `name` and `dir`; `new_subject` sets them to `NULL`.
+- Bumped the project version to `0.1.3`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field of every file header, the "Status" /
+  baseline version lines and binary names across `docs/*.md`, and the commit
+  example in `CLAUDE.md`.
+- Centralized the Makefile version in `VERSION`, with binary and package names
+  derived from it; aligned both XML resources with the release version.
+
 ### Fixed
-Fixes for the Codex debug audit of 2026-10-18 (ASan/UBSan runner).
+
+- Windows packaging copies only application configuration from `etc`, avoiding
+  the restricted MinGW `etc/pki/CA` directory. Packages are assembled in a
+  temporary directory so a failed copy does not leave a partial destination.
+  The broken Fedora 40 MinGW GLib license link is resolved using the same LGPL
+  text installed by native GLib in the builder.
+- Windows subject save/load now uses UTF-8-aware file operations, wide directory
+  enumeration and UTF-8 canonical paths. Extraction checks path truncation,
+  relative entry names and content-size overflow.
+- LibreOffice DLL loading uses UTF-16 and searches for dependencies beside the
+  loaded DLL; configured relative installation paths are made absolute.
 - `src/subject.c` (Linux `_load_subject`): invalid input larger than 64 KiB
   looped forever (and froze the window), because the decode loop called
   `lzma_code` again after an error. Both platforms now stop at the first
@@ -40,7 +104,16 @@ Fixes for the Codex debug audit of 2026-10-18 (ASan/UBSan runner).
   `_Exit(status)`, skipping LibreOffice's static destructors (it leaves its
   temporary profile behind). Pending: try `office->destroy()` instead.
 
+### Validation
+
+- Rebuilt the Fedora Docker image and successfully packaged the existing
+  Windows executable with 137 DLLs. The ZIP passed an integrity check.
+- Verified cleanup after a simulated packaging copy failure.
+- Packaging and ZIP integrity checks do not establish application runtime
+  behavior. Windows application runtime checks remain pending.
+
 ### Known Issues
+
 - `EditPDF` has only been compiled, not run. Pending runtime checks:
   annotations created with Poppler on real PDFs (highlight quads),
   saving over the opened file (on Windows too) and the Poppler DLLs, which
@@ -82,57 +155,9 @@ Fixes for the Codex debug audit of 2026-10-18 (ASan/UBSan runner).
   format.
 - The Windows entry format records only regular files, so empty directories
   cannot be restored.
-- `src/subject.c`: in `_unpack_windows_buffer`, the `subject_log` calls for
-  the truncated size header/content errors come after `return -1` and are
-  never reached.
 - `src/subject.c`: the footer only shows the final message of a load, because
   `load_subject` runs on the GTK main thread and the window is not redrawn
   until it returns.
-
-### Planned
-- Implement CSS custom styles for widgets
-- Add `GtkListView` / `GtkColumnView` for high-performance lists
-- Support for modal dialogs and secondary windows
-- Automated script to package Windows `.exe` with its DLLs
-- Unit tests with GLib Testing Framework
-- Internal API documentation
-- Complete functional testing for both Linux and Windows builds
-- User documentation and `README.md` improvements
-
-## [0.1.3] - 2026-10-18
-
-### Added
-- `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c`: `SubjectDialog`,
-  the modal "Nueva materia" window (a `GtkWindow`, since `GtkDialog` is
-  deprecated in GTK 4.10). Asks for the subject name, its location (default
-  `~/StudyStudio`, changeable with an asynchronous folder chooser) and one
-  check per `EditKind`; validates that the name is not empty and that at
-  least one kind is ticked, and reports the result through a
-  `SubjectDialogDone` callback that decides whether the window closes (see
-  `docs/subjectDialog.c.md`).
-- `Subject.make_subject(self, base_dir, name, folders)` (`_make_subject` in
-  `src/subject.c`): creates `<base_dir>/<name>/` plus one subfolder per entry
-  of the NULL-terminated `folders`, refuses invalid names and existing
-  subjects, and stores the owned `Subject.name` / `Subject.dir`. Folders are
-  created with `mkdir` on Linux and `CreateDirectoryW` (UTF-8 → UTF-16) on
-  Windows, so accented names work.
-- `docs/subjectDialog.c.md`.
-
-### Changed
-- `src/main.c`: the "Materia Num #x" button starts without a popover and
-  opens `SubjectDialog` through `gtk_menu_button_set_create_popup_func`.
-  Once the subject is created, `subject_panel_set_subject` renames the button
-  after the subject and gives it the edit menu. `SubjectPanel` gains
-  `number` and the owned `subject`; the file dialog of a kind starts in the
-  subject's folder for that kind.
-- `new_menu_edit_kind(on_chosen, user_data, enabled)`: the new `enabled`
-  array hides the kinds a subject does not use (`NULL` shows them all).
-- `_close_subject` frees `name` and `dir`; `new_subject` sets them to `NULL`.
-- Bumped the project version to `0.1.3`: `Makefile`'s `NAME`, the window
-  title in `interface.ui`, the version badge and early-development banner in
-  `README.md`, the `Version` field of every file header, the "Status" /
-  baseline version lines and binary names across `docs/*.md`, and the commit
-  example in `CLAUDE.md`.
 
 ## [0.1.2] - 2026-10-16
 

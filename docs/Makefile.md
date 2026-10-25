@@ -11,6 +11,7 @@ Defines Linux and Windows build recipes, generates embedded resource code, and s
 | `all` | Requests both Linux and Windows builds; default target. |
 | `linux` | Builds `build/studystudio-0.1.3_linux` with GCC. |
 | `win64` | Builds `build/studystudio-0.1.3_win64.exe` with MinGW-w64. |
+| `win64-package` | Builds Windows and assembles `build/studystudio-0.1.3_windows/` with the executable, MinGW DLLs (including Poppler's dependencies), GTK data and dependency notices. Requires Python 3 and a fresh output directory; override with `WIN64_PACKAGE_DIR=...`. |
 | `debug` | Builds `build/studystudio-0.1.3_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
 | `win64-debug` | Builds `build/studystudio-0.1.3_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
@@ -27,9 +28,15 @@ The `debug` target reuses the same source discovery and GTK4/liblzma linking as 
 
 Use `make linux`, `make win64`, or `make all` inside an environment with the required tools and libraries. These are configured build targets, not evidence that both platforms currently compile successfully. `make debug`/`make gdb`/`make win64-debug` have the same toolchain requirement as `linux`/`win64`; see [README.md's GDB debugging section](../README.md#-debugging-with-gdb) for the recommended Docker-build/host-debug workflow. `win64-debug` has no `gdb`-equivalent shortcut, since cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up.
 
-Since 0.1.0 `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryA` (kernel32, always linked by MinGW). Since 0.1.1 `SRCS` also discovers `src/msc/*.c` (menu subclasses); the object rules already create `build/<target>/msc/` with `@mkdir -p $(@D)`. Since 0.1.2, the `pkgconf` calls for both targets ask for `gtk4 poppler-glib`, so `GTK_CFLAGS_*` / `GTK_LIBS_*` carry the Poppler flags used by `EditPDF`, and the link flags add `-lm` (`editPDF.c` uses `ceil`, `lround` and `fabs` from `<math.h>`).
+Since 0.1.0 `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryExW` (kernel32, always linked by MinGW). Since 0.1.1 `SRCS` also discovers `src/msc/*.c` (menu subclasses); the object rules already create `build/<target>/msc/` with `@mkdir -p $(@D)`. Since 0.1.2, the `pkgconf` calls for both targets ask for `gtk4 poppler-glib`, so `GTK_CFLAGS_*` / `GTK_LIBS_*` carry the Poppler flags used by `EditPDF`, and the link flags add `-lm` (`editPDF.c` uses `ceil`, `lround` and `fabs` from `<math.h>`).
 
 ## Current limitations
+
+For distribution, run `make win64-package` in the rebuilt Docker image and
+ship the entire resulting folder, not just the `.exe`. The package deliberately
+includes all DLLs from that image's MinGW `bin` directory, including libraries
+loaded at runtime. It does not copy Linux libraries or LibreOffice. CI uploads
+this folder alongside the standalone binaries. See [Windows checks](windows.md).
 
 - Source discovery is limited to `src/*.c`, `src/edit_subclass/*.c` and `src/msc/*.c`; other nested modules require updated rules.
 - `HEADERS` (`include/*.h` since 0.1.1, it was `include/.h`) is not used as a prerequisite. Header changes alone do not reliably rebuild dependent objects.

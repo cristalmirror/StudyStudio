@@ -26,6 +26,7 @@ Each C source/header has its own document. UI resources and build configuration 
 | `resources.xml` | [Resource manifest](resources.xml.md) |
 | `Makefile` | [Build rules](Makefile.md) |
 | `Dockerfile` | [Build environment](Dockerfile.md) |
+| `scripts/package-windows.py` | [Windows packaging, ZIP creation and runtime checks](windows.md) |
 | `.github/workflows/build.yml` | [Continuous integration workflow](build.yml.md) |
 
 ## Development direction: SOLID
@@ -46,4 +47,4 @@ As relevant code changes, document ownership and error contracts, return recover
 
 ## Review scope
 
-These documents describe a static source review. No build, runtime execution, or cross-platform validation was performed as part of this documentation task. Known limitations below are observations from the source, not an exhaustive defect audit.
+These documents combine source review with the packaging checks recorded in [Windows packaging](windows.md). Docker image creation, Windows packaging and ZIP integrity were verified before the version bump. Windows application runtime validation remains pending. Known limitations below are observations from the source, not an exhaustive defect audit.
