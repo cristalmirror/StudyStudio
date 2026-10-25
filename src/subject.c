@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-18
+ * Last edited: 2026-10-25
  */
 
 /*
@@ -22,6 +22,8 @@
      * don't are ported for windows. 
      */
    #include <windows.h>
+   #include <glib.h>
+   #include <glib/gstdio.h>
 #else
    #include <linux/limits.h>
    #include <sys/wait.h>
@@ -124,6 +126,14 @@ void _read_subject(Subject *self) {
  * The next functions are part important and necessary to
  * _load_subject run correctly and do the decompress 
  */
+static int _win_path_format(char *dest, size_t size, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(dest, size, fmt, args);
+    va_end(args);
+    return (n < 0 || (size_t)n >= size) ? -1 : n;
+}
+
 static uint32_t _read_u32_le(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -140,31 +150,20 @@ static uint64_t _read_u64_le(const uint8_t *p) {
  * (a `relpath` can come as `notas\semana1\archivo.txt`)
  */
 static int _win_mkdir_p(const char *dir_path) {
-    char tmp[MAX_PATH];
-    snprintf(tmp, sizeof(tmp), "%s", dir_path);
-
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '\\') {
-            *p = '\0';
-            if(!CreateDirectoryA(tmp, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) return -1;
-            *p = '\\';
-        }
-    }
-    return (!CreateDirectoryA(tmp, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) ? -1 : 0;
+    return g_mkdir_with_parents(dir_path, 0755);
 }
 
 static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size, const char *dest_dir) {
     (void)self;
     size_t offset = 0;
 
-    if (!CreateDirectoryA(dest_dir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
-        fprintf(stderr, "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
-        subject_log("CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
+    if (_win_mkdir_p(dest_dir) != 0) {
+        subject_log("Could not create extraction directory: %s\n", dest_dir);
         return -1;
     }
 
     while (offset < size) {
-        if (offset + 4 > size) {
+        if (size - offset < 4) {
             fprintf(stderr, "truncated archive: length header\n");
             subject_log("truncated archive: length header\n");
             return -1;
@@ -182,20 +181,36 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
         relpath[rel_len] = '\0';
         offset += rel_len;
 
-        if (offset + 8 > size) { 
-            fprintf(stderr, "truncated archive: size header\n"); return -1; 
+        /* Entries are relative UTF-8 names, never drive paths or traversal. */
+        if (memchr(relpath, '\0', rel_len) || !g_utf8_validate(relpath, -1, NULL)
+            || relpath[0] == '/' || relpath[0] == '\\'
+            || strpbrk(relpath, ":*?\"<>|") != NULL) return -1;
+        char **parts = g_strsplit_set(relpath, "/\\", -1);
+        bool valid = true;
+        for (size_t i = 0; parts[i] != NULL; ++i) {
+            size_t n = strlen(parts[i]);
+            if (n == 0 || parts[i][n - 1] == '.' || parts[i][n - 1] == ' ')
+                valid = false;
+        }
+        g_strfreev(parts);
+        if (!valid) return -1;
+        for (char *p = relpath; *p; ++p) if (*p == '/') *p = '\\';
+
+        if (size - offset < 8) {
             subject_log("truncated archive: size header\n");
+            return -1;
         }
         uint64_t filesize = _read_u64_le(buf + offset);
         offset += 8;
 
-        if (offset + filesize > size) { 
-            fprintf(stderr, "truncated archive: content\n"); return -1; 
+        if (filesize > size - offset) {
             subject_log("truncated archive: content\n");
+            return -1;
         }
 
         char fullpath[MAX_PATH];
-        if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", dest_dir, relpath) < 0) return -1;
+        int n = snprintf(fullpath, sizeof(fullpath), "%s\\%s", dest_dir, relpath);
+        if (n < 0 || (size_t)n >= sizeof(fullpath)) return -1;
 
         char *last_slash = strrchr(fullpath, '\\');
         if (last_slash != NULL) {
@@ -208,7 +223,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
             }
         }
 
-        FILE *out = fopen(fullpath, "wb");
+        FILE *out = g_fopen(fullpath, "wb");
         if (!out) { fprintf(stderr, "fopen(%s) failed\n", fullpath); return -1; }
         if (filesize > 0 && fwrite(buf + offset, 1, (size_t)filesize, out) != (size_t)filesize) {
             fprintf(stderr, "fwrite(%s) failed\n", fullpath);
@@ -216,7 +231,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
             fclose(out);
             return -1;
         }
-        fclose(out);
+        if (fclose(out) != 0) return -1;
         offset += filesize;
     }
     return 0;
@@ -229,13 +244,16 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
   * Example: "C:\subjects\math.xz" -> dest_dir = "C:\subjects\math"
   */
 static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
-    char *full = _fullpath(NULL, path, 0);
+    char *full = g_canonicalize_filename(path, NULL);
     if (!full) return -1;
 
     //filter backslash
     char *last_slash = strrchr(full, '\\');
     char base [MAX_PATH];
-    snprintf(base, sizeof(base), "%s", last_slash ? last_slash + 1 : full);
+    if (_win_path_format(base, sizeof(base), "%s", last_slash ? last_slash + 1 : full) < 0) {
+        g_free(full);
+        return -1;
+    }
 
     //filter point
     char *dot =strrchr(base, '.');
@@ -246,7 +264,7 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
         (int) (last_slash - full), full, base)
         : snprintf(dest_dir, dest_dir_size, "%s", base);
 
-    free(full);
+    g_free(full);
     return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
 }
 
@@ -264,7 +282,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     subject_log("Loading %s...\n", path);
 
-    FILE *f = fopen(path, "rb");
+    FILE *f = g_fopen(path, "rb");
     if (!f) {
         subject_log("Error: could not open %s\n", path);
         return -2;
@@ -388,15 +406,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
  *
  */
 
-/*
- * Make route to connect base + "\" + name int UTF-8 simple 
- * (ANSI -> UTF-8 not implemented here). 
- * 
- * For stability in platforms with Unicode usa WideCharToMultiByte
- * on the name wide.
- * 
- * Here we assume ANSI paths (or compile the framework with UTF-8 support).
- */
+/* Directory enumeration converts native UTF-16 names to UTF-8 entries. */
 static int _is_dot_or_dotdot(Subject *self, const char *name) {
     (void)self;
     return name != NULL && name[0] == '.' &&
@@ -474,7 +484,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
     }
 
     //Open binary mode
-    FILE *f = fopen(fullpath, "rb");
+    FILE *f = g_fopen(fullpath, "rb");
     if (!f) {
         fprintf(stderr," fopen(%s) failed \n",fullpath);
         subject_log("fopen(%s) failed \n",fullpath);
@@ -558,7 +568,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
 
 static int _walk_directory(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx) {
     char search_path[MAX_PATH];
-    WIN32_FIND_DATAA fd;
+    WIN32_FIND_DATAW fd;
 
       /* check that parameters aren't NULL*/  
     if (!self || !base_path || !ctx || !ctx->strm || !ctx->outFile) {
@@ -566,11 +576,11 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
     }
 
     if (rel_prefix && rel_prefix[0] != '\0') {
-        if (snprintf(search_path, sizeof(search_path), "%s\\%s\\*", base_path, rel_prefix) < 0) {
+        if (_win_path_format(search_path, sizeof(search_path), "%s\\%s\\*", base_path, rel_prefix) < 0) {
             return -1;
         }
     } else {
-        if (snprintf(search_path, sizeof(search_path), "%s\\*", base_path) < 0) {
+        if (_win_path_format(search_path, sizeof(search_path), "%s\\*", base_path) < 0) {
             return -1;
         }
     }
@@ -579,7 +589,10 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
      * List the content in base_path
      * (with )
      */
-    HANDLE hfind = FindFirstFileA(search_path, &fd);
+    gunichar2 *wide_search = g_utf8_to_utf16(search_path, -1, NULL, NULL, NULL);
+    if (wide_search == NULL) return -1;
+    HANDLE hfind = FindFirstFileW((wchar_t *)wide_search, &fd);
+    g_free(wide_search);
     if (hfind == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
 
@@ -587,13 +600,18 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
             return 0;
         }
 
-        fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
-        subject_log("FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
+        fprintf(stderr, "FindFirstFileW(%s) failed: %lu\n", search_path, (unsigned long)error);
+        subject_log("FindFirstFileW(%s) failed: %lu\n", search_path, (unsigned long)error);
         return -1;
     }
     /* Go to directory with . and .. by self->is_dot_or_dotdot in loop*/
     do {
-        const char *name = fd.cFileName;
+        char name[MAX_PATH * 4];
+        if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, fd.cFileName, -1,
+                                name, sizeof(name), NULL, NULL) == 0) {
+            FindClose(hfind);
+            return -1;
+        }
         char relpath[MAX_PATH];
 
         if (self->is_dot_or_dotdot(self, name)) {
@@ -601,12 +619,12 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
         }
 
         if (rel_prefix && rel_prefix[0] != '\0') {
-            if (snprintf(relpath, sizeof(relpath), "%s\\%s", rel_prefix, name) < 0) {
+            if (_win_path_format(relpath, sizeof(relpath), "%s\\%s", rel_prefix, name) < 0) {
                 FindClose(hfind);
                 return -1;
             }
         } else {
-            if (snprintf(relpath, sizeof(relpath), "%s", name) < 0) {
+            if (_win_path_format(relpath, sizeof(relpath), "%s", name) < 0) {
                 FindClose(hfind);
                 return -1;
             }
@@ -631,7 +649,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
         } else {
             char fullpath[MAX_PATH];
 
-            if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", base_path, relpath) < 0) {
+            if (_win_path_format(fullpath, sizeof(fullpath), "%s\\%s", base_path, relpath) < 0) {
                 FindClose(hfind);
                 return -1;
             }
@@ -641,15 +659,15 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
                 return -1;
             }
         }
-    } while (FindNextFileA(hfind, &fd));
+    } while (FindNextFileW(hfind, &fd));
 
     DWORD error = GetLastError();
     FindClose(hfind);
 
     /* Error system message */
     if (error != ERROR_NO_MORE_FILES) {
-        fprintf(stderr, "FindNextFileA failed: %lu\n", (unsigned long)error);
-        subject_log("FindNextFileA failed: %lu\n", (unsigned long)error);
+        fprintf(stderr, "FindNextFileW failed: %lu\n", (unsigned long)error);
+        subject_log("FindNextFileW failed: %lu\n", (unsigned long)error);
         return -1;
     }
 
@@ -665,7 +683,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     }
 
     /* Open file */
-    FILE *outf = fopen(*outpath, "wb");
+    FILE *outf = g_fopen(*outpath, "wb");
     if (!outf) {
         fprintf(stderr,"fopen(%s) failed \n", *outpath);
         subject_log("fopen(%s) failed \n", *outpath);
@@ -690,7 +708,14 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
      * directory was written inside the archive.
      */
 
-    char *dircopy = _fullpath(NULL, *dir, 0);
+    char *dircopy = g_canonicalize_filename(*dir, NULL);
+    if (dircopy != NULL && strlen(dircopy) >= MAX_PATH) {
+        subject_log("Error: subject path too long\n");
+        g_free(dircopy);
+        lzma_end(&strm);
+        fclose(outf);
+        return;
+    }
     if (!dircopy) {
         fprintf(stderr,"_fullpath(%s) filed\n", *dir);
         subject_log("_fullpath(%s) filed\n", *dir);
@@ -716,7 +741,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         snprintf(base, sizeof(base), "%s", last_slash + 1);
     }
 
-    free(dircopy);
+    g_free(dircopy);
 
     WalkContext ctx;
     ctx.outFile = outf;
