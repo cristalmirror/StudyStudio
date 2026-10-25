@@ -131,40 +131,64 @@ make gdb
 A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.1.3_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
 
 ## 📂 Project Structure
-```sh
+
+```text
 StudyStudio/
+├── .github/workflows/
+│   └── build.yml              # Linux/Windows builds and Windows package artifacts
 ├── src/
-│ ├── main.c # Application entry point and callbacks
-│ ├── subject.c # Implementations 
-│ ├── edit.c # Edit base class, editor kinds and factory
-│ ├── menu.c # Menu base class (drop-down menus)
-│ ├── edit_subclass/
-│ │ ├── editTXT.c # Plain-text editor (.txt, .md)
-│ │ ├── editDOC.c # Office editor through LibreOfficeKit
-│ │ └── editPDF.c # PDF viewer/annotator through Poppler
-│ └── msc/ # Subject menus and dialogs
-│   ├── menuEditKind.c # Subject menu: which kind of document to edit
-│   └── subjectDialog.c # New subject dialog
-├── build/
-│ ├── linux/ # Linux object files (release)
-│ ├── linux-debug/ # Linux object files (debug, for GDB)
-│ ├── win64/ # Windows object files (release)
-│ └── win64-debug/ # Windows object files (debug)
-├──include
-│ ├ subject.h #definitions subject manager
-│ ├ edit.h # Edit base class
-│ ├ menu.h # Menu base class
-│ ├ edit_subclass/ # editTXT.h, editDOC.h, editPDF.h, ...
-│ ├ msc/ # menuEditKind.h, ...
-│ └ third_party/LibreOfficeKit/ # vendored LOK headers (MPL-2.0, patched for C)
-├── interface.ui # GTK4 UI definition (XML)
-├── resources.xml
-├── CLAUDE.md #claud code context added
-├── Makefile # Build rules for both platforms
-├── Dockerfile # Fedora 40 build environment
-├── CHANGELOG.md # Version history
-└── README.md # This file
+│   ├── main.c                 # Application entry point and UI callbacks
+│   ├── subject.c              # Subject folders, archive save/load and extraction
+│   ├── edit.c                 # Edit base class, editor kinds and factory
+│   ├── menu.c                 # Drop-down menu base class
+│   ├── edit_subclass/
+│   │   ├── editTXT.c          # Plain-text editor (.txt, .md)
+│   │   ├── editDOC.c          # Office viewer through LibreOfficeKit
+│   │   └── editPDF.c          # PDF viewer and annotations through Poppler
+│   └── msc/
+│       ├── menuEditKind.c     # Subject document-kind menu
+│       └── subjectDialog.c    # New subject dialog
+├── include/
+│   ├── subject.h              # Subject data and public operations
+│   ├── edit.h                 # Edit base class interface
+│   ├── menu.h                 # Menu base class interface
+│   ├── edit_subclass/         # Editor headers, including the editUML.h placeholder
+│   ├── msc/                   # Subject menu and dialog headers
+│   └── third_party/LibreOfficeKit/ # Vendored LOK headers, patched for C/Windows
+├── scripts/
+│   └── package-windows.py     # Assemble the executable, DLLs, GTK data and notices
+├── docs/
+│   ├── README.md              # Documentation index and development guidelines
+│   ├── windows.md             # Windows packaging, ZIP commands and runtime checks
+│   ├── class_diagram.md       # Application class diagram
+│   ├── prototype_ia.md        # Development session history
+│   └── *.md                   # Source, interface and build documentation
+├── build/                     # Generated outputs (ignored by Git)
+│   ├── linux/                 # Linux release object files
+│   ├── linux-debug/           # Linux debug object files
+│   ├── win64/                 # Windows release object files
+│   ├── win64-debug/           # Windows debug object files
+│   ├── resources.c            # Generated embedded GTK interface
+│   ├── studystudio-0.1.3_linux
+│   ├── studystudio-0.1.3_linux_debug
+│   ├── studystudio-0.1.3_win64.exe
+│   ├── studystudio-0.1.3_win64_debug.exe
+│   └── studystudio-0.1.3_windows/ # Windows distribution with DLLs and runtime data
+├── interface.ui               # GTK4 interface definition (XML)
+├── resources.xml              # Embedded resource manifest
+├── Makefile                   # Release/debug builds and Windows packaging
+├── Dockerfile                 # Fedora 40 Linux/MinGW build environment
+├── CODEX.md                   # Codex collaboration and code-comment conventions
+├── CLAUDE.md                  # Claude collaboration context
+├── .gitignore                 # Excluded build outputs and local files
+├── LICENSE                    # GPLv3 license
+├── CHANGELOG.md               # Version history
+└── README.md                  # Project overview and build instructions
 ```
+
+Files under `build/` appear when their corresponding targets run. Windows
+package directories can have another name when `WIN64_PACKAGE_DIR` is set.
+ZIP archives are created separately using the commands in [docs/windows.md](docs/windows.md).
 
 ## 📝 Commit Conventions
 
