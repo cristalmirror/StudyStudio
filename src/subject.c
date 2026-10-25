@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-25
  */
 
 /*
@@ -22,6 +22,8 @@
      * don't are ported for windows. 
      */
    #include <windows.h>
+   #include <glib.h>
+   #include <glib/gstdio.h>
 #else
    #include <linux/limits.h>
    #include <sys/wait.h>
@@ -124,6 +126,14 @@ void _read_subject(Subject *self) {
  * The next functions are part important and necessary to
  * _load_subject run correctly and do the decompress 
  */
+static int _win_path_format(char *dest, size_t size, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(dest, size, fmt, args);
+    va_end(args);
+    return (n < 0 || (size_t)n >= size) ? -1 : n;
+}
+
 static uint32_t _read_u32_le(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -140,31 +150,20 @@ static uint64_t _read_u64_le(const uint8_t *p) {
  * (a `relpath` can come as `notas\semana1\archivo.txt`)
  */
 static int _win_mkdir_p(const char *dir_path) {
-    char tmp[MAX_PATH];
-    snprintf(tmp, sizeof(tmp), "%s", dir_path);
-
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '\\') {
-            *p = '\0';
-            if(!CreateDirectoryA(tmp, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) return -1;
-            *p = '\\';
-        }
-    }
-    return (!CreateDirectoryA(tmp, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) ? -1 : 0;
+    return g_mkdir_with_parents(dir_path, 0755);
 }
 
 static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size, const char *dest_dir) {
     (void)self;
     size_t offset = 0;
 
-    if (!CreateDirectoryA(dest_dir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
-        fprintf(stderr, "CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
-        subject_log("CreateDirectoryA(%s) failed: %lu\n", dest_dir, (unsigned long)GetLastError());
+    if (_win_mkdir_p(dest_dir) != 0) {
+        subject_log("Could not create extraction directory: %s\n", dest_dir);
         return -1;
     }
 
     while (offset < size) {
-        if (offset + 4 > size) {
+        if (size - offset < 4) {
             fprintf(stderr, "truncated archive: length header\n");
             subject_log("truncated archive: length header\n");
             return -1;
@@ -182,20 +181,36 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
         relpath[rel_len] = '\0';
         offset += rel_len;
 
-        if (offset + 8 > size) { 
-            fprintf(stderr, "truncated archive: size header\n"); return -1; 
+        /* Entries are relative UTF-8 names, never drive paths or traversal. */
+        if (memchr(relpath, '\0', rel_len) || !g_utf8_validate(relpath, -1, NULL)
+            || relpath[0] == '/' || relpath[0] == '\\'
+            || strpbrk(relpath, ":*?\"<>|") != NULL) return -1;
+        char **parts = g_strsplit_set(relpath, "/\\", -1);
+        bool valid = true;
+        for (size_t i = 0; parts[i] != NULL; ++i) {
+            size_t n = strlen(parts[i]);
+            if (n == 0 || parts[i][n - 1] == '.' || parts[i][n - 1] == ' ')
+                valid = false;
+        }
+        g_strfreev(parts);
+        if (!valid) return -1;
+        for (char *p = relpath; *p; ++p) if (*p == '/') *p = '\\';
+
+        if (size - offset < 8) {
             subject_log("truncated archive: size header\n");
+            return -1;
         }
         uint64_t filesize = _read_u64_le(buf + offset);
         offset += 8;
 
-        if (offset + filesize > size) { 
-            fprintf(stderr, "truncated archive: content\n"); return -1; 
+        if (filesize > size - offset) {
             subject_log("truncated archive: content\n");
+            return -1;
         }
 
         char fullpath[MAX_PATH];
-        if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", dest_dir, relpath) < 0) return -1;
+        int n = snprintf(fullpath, sizeof(fullpath), "%s\\%s", dest_dir, relpath);
+        if (n < 0 || (size_t)n >= sizeof(fullpath)) return -1;
 
         char *last_slash = strrchr(fullpath, '\\');
         if (last_slash != NULL) {
@@ -208,7 +223,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
             }
         }
 
-        FILE *out = fopen(fullpath, "wb");
+        FILE *out = g_fopen(fullpath, "wb");
         if (!out) { fprintf(stderr, "fopen(%s) failed\n", fullpath); return -1; }
         if (filesize > 0 && fwrite(buf + offset, 1, (size_t)filesize, out) != (size_t)filesize) {
             fprintf(stderr, "fwrite(%s) failed\n", fullpath);
@@ -216,7 +231,7 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
             fclose(out);
             return -1;
         }
-        fclose(out);
+        if (fclose(out) != 0) return -1;
         offset += filesize;
     }
     return 0;
@@ -229,13 +244,16 @@ static int _unpack_windows_buffer(Subject *self,const uint8_t *buf, size_t size,
   * Example: "C:\subjects\math.xz" -> dest_dir = "C:\subjects\math"
   */
 static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir_size) {
-    char *full = _fullpath(NULL, path, 0);
+    char *full = g_canonicalize_filename(path, NULL);
     if (!full) return -1;
 
     //filter backslash
     char *last_slash = strrchr(full, '\\');
     char base [MAX_PATH];
-    snprintf(base, sizeof(base), "%s", last_slash ? last_slash + 1 : full);
+    if (_win_path_format(base, sizeof(base), "%s", last_slash ? last_slash + 1 : full) < 0) {
+        g_free(full);
+        return -1;
+    }
 
     //filter point
     char *dot =strrchr(base, '.');
@@ -246,7 +264,7 @@ static int _derive_extract_dir(const char *path, char *dest_dir, size_t dest_dir
         (int) (last_slash - full), full, base)
         : snprintf(dest_dir, dest_dir_size, "%s", base);
 
-    free(full);
+    g_free(full);
     return (n < 0 || (size_t) n >= dest_dir_size) ? -1 : 0;
 }
 
@@ -264,7 +282,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
 
     subject_log("Loading %s...\n", path);
 
-    FILE *f = fopen(path, "rb");
+    FILE *f = g_fopen(path, "rb");
     if (!f) {
         subject_log("Error: could not open %s\n", path);
         return -2;
@@ -330,13 +348,9 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
                 acc_size += produced;
             }
 
-            if (ret == LZMA_STREAM_END) break;
+            /* LZMA_STREAM_END or any error (a truncated file gives
+             * LZMA_BUF_ERROR): stop and keep ret */
             if (ret != LZMA_OK) break;
-
-            /* Safety cutoff: EOF, no bytes pending and no progress ->
-            * the file is truncated and will never reach LZMA_STREAM_END. */
-            if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_BUF_SIZE)
-    break;
 
     } while (1);
 
@@ -359,20 +373,27 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
         }
+        if (ret == LZMA_BUF_ERROR) {
+            subject_log("Error: %s is truncated (unexpected end of file)\n", path);
+            return -10;
+        }
         subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
         return -8;
     }
 
-    *out_buf = acc;
-    *out_size = acc_size;
     /* implementation of Windows directory factory and decompress result. */
     char dest_dir[MAX_PATH];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_windows_buffer(self, acc, acc_size, dest_dir) != 0) {
+        free(acc);   /* the caller only owns the buffer when we return 0 */
         fprintf(stderr, "failed to unpack %s\n", path);
         subject_log("Error: could not extract %s\n", path);
         return -9;
     }
+
+    /* everything went fine: only now the buffer goes to the caller */
+    *out_buf = acc;
+    *out_size = acc_size;
     subject_log("Subject loaded: %s (%lu bytes) into %s\n", path, (unsigned long)acc_size, dest_dir);
     return 0;
 
@@ -385,15 +406,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
  *
  */
 
-/*
- * Make route to connect base + "\" + name int UTF-8 simple 
- * (ANSI -> UTF-8 not implemented here). 
- * 
- * For stability in platforms with Unicode usa WideCharToMultiByte
- * on the name wide.
- * 
- * Here we assume ANSI paths (or compile the framework with UTF-8 support).
- */
+/* Directory enumeration converts native UTF-16 names to UTF-8 entries. */
 static int _is_dot_or_dotdot(Subject *self, const char *name) {
     (void)self;
     return name != NULL && name[0] == '.' &&
@@ -471,7 +484,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
     }
 
     //Open binary mode
-    FILE *f = fopen(fullpath, "rb");
+    FILE *f = g_fopen(fullpath, "rb");
     if (!f) {
         fprintf(stderr," fopen(%s) failed \n",fullpath);
         subject_log("fopen(%s) failed \n",fullpath);
@@ -555,7 +568,7 @@ static int _write_file_entry_to_lzma(Subject *self, const char *relpath, const c
 
 static int _walk_directory(Subject *self, const char *base_path, const char *rel_prefix, WalkContext *ctx) {
     char search_path[MAX_PATH];
-    WIN32_FIND_DATAA fd;
+    WIN32_FIND_DATAW fd;
 
       /* check that parameters aren't NULL*/  
     if (!self || !base_path || !ctx || !ctx->strm || !ctx->outFile) {
@@ -563,11 +576,11 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
     }
 
     if (rel_prefix && rel_prefix[0] != '\0') {
-        if (snprintf(search_path, sizeof(search_path), "%s\\%s\\*", base_path, rel_prefix) < 0) {
+        if (_win_path_format(search_path, sizeof(search_path), "%s\\%s\\*", base_path, rel_prefix) < 0) {
             return -1;
         }
     } else {
-        if (snprintf(search_path, sizeof(search_path), "%s\\*", base_path) < 0) {
+        if (_win_path_format(search_path, sizeof(search_path), "%s\\*", base_path) < 0) {
             return -1;
         }
     }
@@ -576,7 +589,10 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
      * List the content in base_path
      * (with )
      */
-    HANDLE hfind = FindFirstFileA(search_path, &fd);
+    gunichar2 *wide_search = g_utf8_to_utf16(search_path, -1, NULL, NULL, NULL);
+    if (wide_search == NULL) return -1;
+    HANDLE hfind = FindFirstFileW((wchar_t *)wide_search, &fd);
+    g_free(wide_search);
     if (hfind == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
 
@@ -584,13 +600,18 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
             return 0;
         }
 
-        fprintf(stderr, "FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
-        subject_log("FindFirstFileA(%s) failed: %lu\n", search_path, (unsigned long)error);
+        fprintf(stderr, "FindFirstFileW(%s) failed: %lu\n", search_path, (unsigned long)error);
+        subject_log("FindFirstFileW(%s) failed: %lu\n", search_path, (unsigned long)error);
         return -1;
     }
     /* Go to directory with . and .. by self->is_dot_or_dotdot in loop*/
     do {
-        const char *name = fd.cFileName;
+        char name[MAX_PATH * 4];
+        if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, fd.cFileName, -1,
+                                name, sizeof(name), NULL, NULL) == 0) {
+            FindClose(hfind);
+            return -1;
+        }
         char relpath[MAX_PATH];
 
         if (self->is_dot_or_dotdot(self, name)) {
@@ -598,12 +619,12 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
         }
 
         if (rel_prefix && rel_prefix[0] != '\0') {
-            if (snprintf(relpath, sizeof(relpath), "%s\\%s", rel_prefix, name) < 0) {
+            if (_win_path_format(relpath, sizeof(relpath), "%s\\%s", rel_prefix, name) < 0) {
                 FindClose(hfind);
                 return -1;
             }
         } else {
-            if (snprintf(relpath, sizeof(relpath), "%s", name) < 0) {
+            if (_win_path_format(relpath, sizeof(relpath), "%s", name) < 0) {
                 FindClose(hfind);
                 return -1;
             }
@@ -628,7 +649,7 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
         } else {
             char fullpath[MAX_PATH];
 
-            if (snprintf(fullpath, sizeof(fullpath), "%s\\%s", base_path, relpath) < 0) {
+            if (_win_path_format(fullpath, sizeof(fullpath), "%s\\%s", base_path, relpath) < 0) {
                 FindClose(hfind);
                 return -1;
             }
@@ -638,15 +659,15 @@ static int _walk_directory(Subject *self, const char *base_path, const char *rel
                 return -1;
             }
         }
-    } while (FindNextFileA(hfind, &fd));
+    } while (FindNextFileW(hfind, &fd));
 
     DWORD error = GetLastError();
     FindClose(hfind);
 
     /* Error system message */
     if (error != ERROR_NO_MORE_FILES) {
-        fprintf(stderr, "FindNextFileA failed: %lu\n", (unsigned long)error);
-        subject_log("FindNextFileA failed: %lu\n", (unsigned long)error);
+        fprintf(stderr, "FindNextFileW failed: %lu\n", (unsigned long)error);
+        subject_log("FindNextFileW failed: %lu\n", (unsigned long)error);
         return -1;
     }
 
@@ -662,7 +683,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
     }
 
     /* Open file */
-    FILE *outf = fopen(*outpath, "wb");
+    FILE *outf = g_fopen(*outpath, "wb");
     if (!outf) {
         fprintf(stderr,"fopen(%s) failed \n", *outpath);
         subject_log("fopen(%s) failed \n", *outpath);
@@ -687,7 +708,14 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
      * directory was written inside the archive.
      */
 
-    char *dircopy = _fullpath(NULL, *dir, 0);
+    char *dircopy = g_canonicalize_filename(*dir, NULL);
+    if (dircopy != NULL && strlen(dircopy) >= MAX_PATH) {
+        subject_log("Error: subject path too long\n");
+        g_free(dircopy);
+        lzma_end(&strm);
+        fclose(outf);
+        return;
+    }
     if (!dircopy) {
         fprintf(stderr,"_fullpath(%s) filed\n", *dir);
         subject_log("_fullpath(%s) filed\n", *dir);
@@ -713,7 +741,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
         snprintf(base, sizeof(base), "%s", last_slash + 1);
     }
 
-    free(dircopy);
+    g_free(dircopy);
 
     WalkContext ctx;
     ctx.outFile = outf;
@@ -780,6 +808,7 @@ void _save_subject(Subject *self, char **msg, const char **dir, const char **out
        * Child process: execute `tar -cf - -C <parent_of_dir> <basename>`.
        * Redirect its standard output to the write end of the pipe.
        */
+        signal(SIGPIPE, SIG_DFL);   /* main() ignores it: see _unpack_tar_buffer */
         close(pipefd[0]);
         if (dup2(pipefd[1], STDOUT_FILENO) == -1) self->fatal("dup2");
         close(pipefd[1]);
@@ -1004,15 +1033,28 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
         return -1;
     }    
 
+    (void)self;
     int pipefd[2];
-    if (pipe(pipefd) == -1) self->fatal("pipe");
+    if (pipe(pipefd) == -1) {
+        subject_log("pipe failed: %s\n", strerror(errno));
+        return -1;
+    }
 
     pid_t pid = fork();
-    if (pid == -1) self->fatal("fork");
+    if (pid == -1) {
+        subject_log("fork failed: %s\n", strerror(errno));
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
 
     if (pid == 0) {
+        /* main() ignores SIGPIPE; ignored signals survive exec, so give tar
+         * back the default. _exit, not exit/fatal: the child must not run
+         * the parent's atexit handlers (GTK, LibreOffice...). */
+        signal(SIGPIPE, SIG_DFL);
         close(pipefd[1]);
-        if (dup2(pipefd[0], STDIN_FILENO) == -1) self->fatal("dup2");
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) _exit(127);
         close(pipefd[0]);
         execlp("tar","tar","-xf","-","-C", dest_dir,(char *) NULL);
         perror("execlp tar -xf");
@@ -1020,29 +1062,32 @@ static int _unpack_tar_buffer(Subject *self, const uint8_t *buf, size_t size, co
     }
 
     close(pipefd[0]);
+    int rc = 0;
     size_t written = 0;
     while (written < size) {
-        /* code */
         ssize_t w = write(pipefd[1], buf + written, size - written);
         if (w == -1) {
             if (errno == EINTR) continue;
+            /* EPIPE: tar is gone (not installed, or it rejected the data) */
             fprintf(stderr, "write to tar pipe failed: %s\n", strerror(errno));
             subject_log("write to tar pipe failed: %s\n", strerror(errno));
-            close(pipefd[1]);
-            return -1;
+            rc = -1;
+            break;   /* don't return yet: the child must be reaped */
         }
         written += (size_t)w;
     }
-    close(pipefd[1]);
+    close(pipefd[1]);   /* EOF for tar */
 
     int status;
-    if (waitpid(pid, &status, 0) == -1) {
+    while (waitpid(pid, &status, 0) == -1) {
+        if (errno == EINTR) continue;
         fprintf(stderr,"waitpid failed: %s\n", strerror(errno));
         subject_log("waitpid failed: %s\n", strerror(errno));
         return -1;
     }
 
-    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) rc = -1;
+    return rc;
 }
 
 /* This function load subject:
@@ -1105,7 +1150,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
     }
 
     /* Dynamic Buffer accumulators */
-    uint8_t *acc = LZMA_RUN;
+    uint8_t *acc = NULL;
     size_t acc_size = 0;
     size_t acc_cap = 0;
 
@@ -1154,7 +1199,7 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
              * more capacity to accumulator (acc).
              */
             if (acc_size + produced > acc_cap) {
-                size_t new_cap = new_cap = acc_cap ? acc_cap * 2 : produced;
+                size_t new_cap = acc_cap ? acc_cap * 2 : produced;
 
                 while (new_cap < acc_size + produced) new_cap *= 2;
                 uint8_t *tmp = realloc(acc, new_cap);
@@ -1169,14 +1214,14 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
             acc_size += produced;
         }
 
-        if (ret == LZMA_STREAM_END) {
-            break;
-        } else if (ret == LZMA_OK) {
-            continue; // error
-        }
-        
-        /*if haven't more input and don't produced output and EOF, finish  */
-        if (feof(f) && strm.avail_in == 0 && strm.avail_out == OUT_CHUNK) break;
+        /*
+         * LZMA_OK: keep going. LZMA_STREAM_END or any error: stop here and
+         * keep ret. Calling lzma_code again after an error never recovers
+         * (it loops forever or replaces the real error with another one).
+         * A truncated file ends here too: with LZMA_FINISH and no progress
+         * liblzma returns LZMA_BUF_ERROR.
+         */
+        if (ret != LZMA_OK) break;
 
     } while (1);
 
@@ -1190,36 +1235,45 @@ int _load_subject(Subject *self, const char *path, uint8_t **out_buf, size_t *ou
      * Error maps to return code
      * "Ah shit, here we go again!!!"
      */
-    if (ret != LZMA_OK && ret != LZMA_STREAM_END) {
-        free(acc);
-        if (ret == LZMA_MEM_ERROR) {
+    if (ret != LZMA_STREAM_END) {
+    free(acc);
+
+        switch (ret) {
+        case LZMA_MEM_ERROR:
             subject_log("Error: out of memory while decompressing %s\n", path);
             return -5;
-        }
-        if (ret == LZMA_FORMAT_ERROR) {
+
+        case LZMA_FORMAT_ERROR:
             subject_log("Error: %s is not a valid .xz file\n", path);
             return -6;
-        }
-        if (ret == LZMA_DATA_ERROR) {
+
+        case LZMA_DATA_ERROR:
             subject_log("Error: corrupted data in %s\n", path);
             return -7;
-        }
-        subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
-        return -8; // error lzma unknown
-    }
 
-    *out_buf = acc;
-    *out_size = acc_size;
+        case LZMA_BUF_ERROR:
+            subject_log("Error: %s is truncated (unexpected end of file)\n", path);
+            return -10;
+
+        default:
+            subject_log("Error: unknown lzma error (%d) in %s\n", (int)ret, path);
+            return -8; // error lzma unknown
+    }
+}
 
     /* implementation of GNU/Linux directory factory and decompress result. */
     char dest_dir[PATH_MAX];
     if (_derive_extract_dir(path, dest_dir, sizeof(dest_dir)) != 0 ||
         _unpack_tar_buffer(self, acc, acc_size, dest_dir) != 0) {
+        free(acc);   /* the caller only owns the buffer when we return 0 */
         fprintf(stderr, "failed to unpack %s\n", path);
         subject_log("Error: could not extract %s\n", path);
         return -9;
     }
 
+    /* everything went fine: only now the buffer goes to the caller */
+    *out_buf = acc;
+    *out_size = acc_size;
     subject_log("Subject loaded: %s (%zu bytes) into %s\n", path, acc_size, dest_dir);
     return 0;
 }
@@ -1273,18 +1327,101 @@ static void subject_log(const char *fmt, ...) {
 
     if (buf != stack_buf) free(buf);
 }
+#ifdef _WIN32
+    #define SUBJECT_SEP '\\'
+    #define SUBJECT_PATH_MAX MAX_PATH
+#else
+    #define SUBJECT_SEP '/'
+    #define SUBJECT_PATH_MAX PATH_MAX
+#endif
+
+/*
+ * Creates one folder: 0 created, 1 already existed, -1 error.
+ * GTK gives UTF-8 paths; on Windows CreateDirectoryA would read them in the
+ * ANSI code page and break names like "Física", so we go through UTF-16.
+ */
+static int _mkdir_utf8(const char *path) {
+    #ifdef _WIN32
+        wchar_t wpath[MAX_PATH];
+        if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, MAX_PATH) == 0) return -1;
+        if (CreateDirectoryW(wpath, NULL)) return 0;
+        return (GetLastError() == ERROR_ALREADY_EXISTS) ? 1 : -1;
+    #else
+        if (mkdir(path, 0755) == 0) return 0;
+        return (errno == EEXIST) ? 1 : -1;
+    #endif
+}
+
+/* the name becomes ONE folder: no separators nor characters Windows rejects */
+static bool _is_valid_subject_name(const char *name) {
+    if (name == NULL || name[0] == '\0') return false;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return false;
+    return strpbrk(name, "/\\:*?\"<>|") == NULL;
+}
+
 /* 
  * make the container of all resources necesary to create 
- * a subject (folders, tools, edits, etc).
+ * a subject: <base_dir>/<name>/ with one subfolder per entry of
+ * folders (NULL-terminated). Returns 0 on success, -1 on error.
  */
-void _make_subject(Subject *self) {
+static int _make_subject(Subject *self, const char *base_dir, const char *name,
+                         const char *const *folders) {
+    char path[SUBJECT_PATH_MAX];
+    char sub[SUBJECT_PATH_MAX];
+    int n;
 
+    if (self == NULL || base_dir == NULL) return -1;
+    if (!_is_valid_subject_name(name)) {
+        subject_log("Invalid subject name: '%s'\n", name != NULL ? name : "");
+        return -1;
+    }
 
+    /* 1. base folder (e.g. ~/StudyStudio): it may already exist */
+    if (_mkdir_utf8(base_dir) < 0) {
+        subject_log("Cannot create %s\n", base_dir);
+        return -1;
+    }
+
+    /* 2. subject folder: must be new, never mix two subjects */
+    n = snprintf(path, sizeof(path), "%s%c%s", base_dir, SUBJECT_SEP, name);
+    if (n < 0 || (size_t)n >= sizeof(path)) {
+        subject_log("Path too long for subject '%s'\n", name);
+        return -1;
+    }
+    switch (_mkdir_utf8(path)) {
+        case 0:  break;
+        case 1:  subject_log("Subject already exists: %s\n", path); return -1;
+        default: subject_log("Cannot create %s\n", path);           return -1;
+    }
+
+    /* 3. one subfolder per kind of file */
+    for (size_t i = 0; folders != NULL && folders[i] != NULL; i++) {
+        n = snprintf(sub, sizeof(sub), "%s%c%s", path, SUBJECT_SEP, folders[i]);
+        if (n < 0 || (size_t)n >= sizeof(sub) || _mkdir_utf8(sub) < 0) {
+            subject_log("Cannot create folder '%s' in %s\n", folders[i], path);
+            return -1;
+        }
+    }
+
+    /* 4. remember who we are */
+    free(self->name);
+    free(self->dir);
+    self->name = strdup(name);
+    self->dir = strdup(path);
+    if (self->name == NULL || self->dir == NULL) {
+        subject_log("Out of memory\n");
+        return -1;
+    }
+
+    subject_log("Subject created: %s\n", path);
+    return 0;
 }
 
 /*destructor*/
 void _close_subject(Subject *self) {
     if (self != NULL) {
+        free(self->name);
+        free(self->dir);
         free(self);
     }
 }
@@ -1307,6 +1444,9 @@ Subject *new_subject(int value) {
     new->pid = 0;
     #endif
     new->val = value;
+    new->name = NULL;
+    new->dir = NULL;
+    new->make_subject = _make_subject;
     new->wait_pid_os_opt = _wait_pid_os_opt;
     new->save_subject = _save_subject;
     new->read_subject = _read_subject;

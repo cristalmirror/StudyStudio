@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-13
+ * Last edited: 2026-10-25
  */
 /*
  * Subject menu: one entry per EditKind, reports the chosen one.
@@ -16,7 +16,8 @@ static void _menu_edit_kind_activate(Menu *self, gpointer item_data) {
     menu->on_chosen((const EditKind *)item_data, menu->user_data);
 }
 
-Menu *new_menu_edit_kind(MenuEditKindChosen on_chosen, gpointer user_data) {
+Menu *new_menu_edit_kind(MenuEditKindChosen on_chosen, gpointer user_data,
+                         const bool *enabled) {
     MenuEditKind *menu = calloc(1, sizeof *menu);
     if (menu == NULL) return NULL;
 
@@ -27,6 +28,7 @@ Menu *new_menu_edit_kind(MenuEditKindChosen on_chosen, gpointer user_data) {
 
     for (size_t i = 0; i < edit_kinds_count; i++) {
         const EditKind *kind = &edit_kinds[i];
+        if (enabled != NULL && !enabled[i]) continue;   /* not used by this subject */
         menu->base.add_item(&menu->base, kind->label,
                             kind->suffixes != NULL, (gpointer)kind);
     }

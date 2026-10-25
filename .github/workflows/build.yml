@@ -56,6 +56,13 @@ jobs:
             studystudio-builder \
             make win64-debug
 
+      - name: Package Windows runtime DLLs and GTK data
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$(pwd)/build:/usr/src/app/build" \
+            studystudio-builder make win64-package
+
       - name: Verify binaries were produced
         run: |
           test -f build/studystudio-*_linux
@@ -72,3 +79,4 @@ jobs:
             build/*_win64.exe
             build/*_linux_debug
             build/*_win64_debug.exe
+            build/*_windows/**

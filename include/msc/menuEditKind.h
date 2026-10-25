@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-13
+ * Last edited: 2026-10-25
  */
 
 /* Drop-down menu listing every EditKind ("what do you want to edit?"). */
@@ -22,6 +22,8 @@ typedef struct {
     gpointer user_data;           /* passed back to on_chosen */
 } MenuEditKind;
 
-Menu *new_menu_edit_kind(MenuEditKindChosen on_chosen, gpointer user_data);
+/* enabled[i] false hides edit_kinds[i]; enabled NULL shows every kind */
+Menu *new_menu_edit_kind(MenuEditKindChosen on_chosen, gpointer user_data,
+                         const bool *enabled);
 
 #endif

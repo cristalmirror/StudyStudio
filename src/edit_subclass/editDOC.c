@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-13
+ * Last edited: 2026-10-25
  */
 
 /*
@@ -44,7 +44,11 @@ static LibreOfficeKit *_doc_office(void) {
     s_office_tried = true;
 
     const char *env = g_getenv("STUDYSTUDIO_LO_PATH");
-    if (env != NULL) s_office = lok_init(env);
+    if (env != NULL && *env != '\0') {
+        char *absolute = g_canonicalize_filename(env, NULL);
+        s_office = lok_init(absolute);
+        g_free(absolute);
+    }
 
     for (int i = 0; s_office == NULL && s_lo_paths[i] != NULL; i++) {
         if (g_file_test(s_lo_paths[i], G_FILE_TEST_IS_DIR))
@@ -57,6 +61,11 @@ static LibreOfficeKit *_doc_office(void) {
 
 bool edit_doc_available(void) {
     return _doc_office() != NULL;
+}
+
+/* unlike edit_doc_available(), never starts LibreOffice */
+bool edit_doc_started(void) {
+    return s_office != NULL;
 }
 
 static int _doc_open(Edit *self, const char *path) {

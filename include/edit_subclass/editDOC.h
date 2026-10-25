@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-10-25
  */
 
 /* Office document editor (.docx, .odt, .xlsx, .pptx...) backed by LibreOfficeKit. */
@@ -30,5 +30,6 @@ extern const char *const edit_doc_suffixes[];
 
 Edit *new_edit_doc(void);
 bool edit_doc_available(void);    /* true if LibreOffice was found and started */
+bool edit_doc_started(void);      /* true if LibreOffice is running (no lok_init attempt) */
 
 #endif

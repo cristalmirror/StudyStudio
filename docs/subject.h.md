@@ -1,6 +1,6 @@
 # `include/subject.h`
 
-Status: draft for user approval; version 0.1.2.
+Status: draft for user approval; version 0.1.3.
 
 ## Purpose
 
@@ -43,7 +43,9 @@ void subject_set_logger(SubjectLogFunc fn, void *user_data);
 
 | Member or function | Current contract |
 | --- | --- |
-| `val` | Integer initialized from the constructor argument; no domain meaning is established yet. |
+| `val` | Integer initialized from the constructor argument; `main.c` passes the panel number (`#x`). No other domain meaning is established yet. |
+| `name` | Owned subject name, or `NULL` until `make_subject` succeeds. Freed by `close_subject`. |
+| `dir` | Owned full path of the subject folder (`<base_dir>/<name>`), or `NULL` until `make_subject` succeeds. Freed by `close_subject`. |
 | `proc_handle` (Windows) / `pid` (elsewhere) | Child-process identifier. As of this version these are two distinct struct fields selected by `#ifdef _WIN32`, not a single field holding either a `HANDLE` or a `pid_t`: `proc_handle` is a Win32 `HANDLE`, `pid` is a POSIX `pid_t`. |
 | `is_dot_or_dotdot(self, name)` (Windows only) | Returns non-zero when `name` is `.` or `..`, to be skipped while walking a directory. |
 | `feed_bytes(strm, outbuf, out_buf_size, outfile, data, len)` (Windows only) | Pushes `data` through the active LZMA encoder with `LZMA_RUN` and writes any produced compressed bytes to `outfile`. Does not finish the stream. |
@@ -51,9 +53,10 @@ void subject_set_logger(SubjectLogFunc fn, void *user_data);
 | `fatal(msg)` | Default implementation prints an error and terminates the process. |
 | `read_subject(self)` | Prints `val`; does not load an archive. |
 | `wait_pid_os_opt(self, status)` | Waits for the child; returns `0` on API success or `-1` on API failure. Optional status receives `0` for child success, `1` otherwise. Uses `self->proc_handle` on Windows and `self->pid` elsewhere. |
-| `load_subject(self, path, out_buf, out_size)` | Decodes XZ data into an allocated memory buffer; returns an integer result. See [implementation details](subject.c.md). |
+| `load_subject(self, path, out_buf, out_size)` | Decodes XZ data into an allocated memory buffer and extracts it next to the archive; returns `0` on success or a negative code (`-1` … `-10`, see [subject.c](subject.c.md#loading)). `*out_buf`/`*out_size` are assigned only on `0`; otherwise they stay `NULL`/`0`. |
 | `save_subject(self, msg, dir, outpath)` | Archives a directory and compresses it to the destination. Returns no success/failure value; `msg` is unused on both platforms. |
-| `close_subject(self)` | Frees the object; accepts `NULL` in the default implementation. |
+| `make_subject(self, base_dir, name, folders)` | Since 0.1.3. Creates `<base_dir>/<name>/` and one subfolder per entry of the NULL-terminated `folders` (may be `NULL`), then sets `name` and `dir`. Returns `0` on success, `-1` on an invalid name, an existing subject or any I/O error (reported through the logger). `name`, `base_dir` and `folders` are borrowed and must be UTF-8. See [subject.c](subject.c.md#making-a-subject). |
+| `close_subject(self)` | Frees `name`, `dir` and the object; accepts `NULL` in the default implementation. |
 | `new_subject(value)` | Returns a heap-allocated object with default operations, or `NULL` on allocation failure. |
 
 Callers must use `save_subject`/`load_subject`; they must not depend on the
@@ -63,7 +66,7 @@ Although there is a forward typedef, the full structure is public: consumers can
 
 ## Ownership
 
-The constructor transfers ownership to the caller. Destroy an object once and do not access it afterward. A successfully returned load buffer belongs to the caller and must be freed separately. Destroying a subject does not wait for a process or release an OS process handle.
+The constructor transfers ownership to the caller. Destroy an object once and do not access it afterward. `name` and `dir` belong to the object: copy them if they must outlive it. A load buffer belongs to the caller only when `load_subject` returned `0`, and must then be freed separately; after any other result there is nothing to free. Destroying a subject does not wait for a process or release an OS process handle.
 
 ## SOLID development direction
 

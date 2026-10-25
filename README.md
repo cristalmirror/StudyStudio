@@ -2,7 +2,7 @@
 
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
-[![Version](https://img.shields.io/badge/version-0.1.2-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.3-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
@@ -10,7 +10,7 @@
 ---
 
 > [!WARNING]
-> **This project is in early development (v0.1.2).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
+> **This project is in early development (v0.1.3).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
 
 ---
 
@@ -39,33 +39,43 @@ The project showcases:
 
 ---
 
-## Compilation 
+## Compilation
 
-```
-cd ~/StudyStudio
+The current source version is **0.1.3**, defined by `VERSION` in the Makefile
+and displayed in the XML window title. The Windows runtime package includes
+GTK and Poppler DLLs; LibreOffice remains a separate installation.
 
+Run from the repository root on Linux. Docker provides GTK, Poppler and the
+MinGW Windows dependencies; plain `make` on a host without them will fail.
+
+```bash
 docker build -t studystudio-builder .
-
-mkdir -p build
-
 docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -v "$(pwd)/src:/usr/src/app/src" \
-    -v "$(pwd)/include:/usr/src/app/include" \
-    -v "$(pwd)/build:/usr/src/app/build" \
-    -v "$(pwd)/Makefile:/usr/src/app/Makefile:ro" \
-    -v "$(pwd)/resources.xml:/usr/src/app/resources.xml:ro" \
-    -v "$(pwd)/interface.ui:/usr/src/app/interface.ui:ro" \
-    studystudio-builder \
-    make all
-      
-# to run LINUX
-./build/studystudio-0.0.x_linux
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/usr/src/app \
+  -w /usr/src/app \
+  studystudio-builder make all
 
-#to run WINDOWS
-./build/studystudio-0.0.x_win64.exe
-
+# Run the Linux binary on Linux.
+./build/studystudio-0.1.3_linux
 ```
+
+To distribute Windows, additionally assemble the executable and its DLLs:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/usr/src/app \
+  -w /usr/src/app \
+  studystudio-builder make win64-package
+```
+
+Copy the entire `build/studystudio-0.1.3_windows/` folder to Windows and run
+its `.exe`. `make all` alone does not gather DLLs. Install 64-bit LibreOffice
+separately for office documents. Packaging requires a fresh destination;
+set `WIN64_PACKAGE_DIR=build/windows-new` to use another folder.
+See [Windows packaging and runtime checks](docs/windows.md) for ZIP commands,
+troubleshooting and the remaining Windows checks. Rebuild and repackage after source changes to refresh existing binaries and ZIPs.
 
 ## 🐞 Debugging with GDB
 
@@ -102,7 +112,7 @@ docker run --rm \
 Once the debug binary exists, run GDB directly on the host, the same way you already run the release binary:
 
 ```
-gdb ./build/studystudio-0.0.x_linux_debug
+gdb ./build/studystudio-0.1.3_linux_debug
 ```
 
 Inside GDB:
@@ -118,42 +128,67 @@ There's also a `make gdb` shortcut that rebuilds `debug` and launches GDB in one
 make gdb
 ```
 
-A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.0.x_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
+A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.1.3_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
 
 ## 📂 Project Structure
-```sh
+
+```text
 StudyStudio/
+├── .github/workflows/
+│   └── build.yml              # Linux/Windows builds and Windows package artifacts
 ├── src/
-│ ├── main.c # Application entry point and callbacks
-│ ├── subject.c # Implementations 
-│ ├── edit.c # Edit base class, editor kinds and factory
-│ ├── menu.c # Menu base class (drop-down menus)
-│ ├── edit_subclass/
-│ │ ├── editTXT.c # Plain-text editor (.txt, .md)
-│ │ ├── editDOC.c # Office editor through LibreOfficeKit
-│ │ └── editPDF.c # PDF viewer/annotator through Poppler
-│ └── msc/ # menu subclasses
-│   └── menuEditKind.c # Subject menu: which kind of document to edit
-├── build/
-│ ├── linux/ # Linux object files (release)
-│ ├── linux-debug/ # Linux object files (debug, for GDB)
-│ ├── win64/ # Windows object files (release)
-│ └── win64-debug/ # Windows object files (debug)
-├──include
-│ ├ subject.h #definitions subject manager
-│ ├ edit.h # Edit base class
-│ ├ menu.h # Menu base class
-│ ├ edit_subclass/ # editTXT.h, editDOC.h, editPDF.h, ...
-│ ├ msc/ # menuEditKind.h, ...
-│ └ third_party/LibreOfficeKit/ # vendored LOK headers (MPL-2.0, patched for C)
-├── interface.ui # GTK4 UI definition (XML)
-├── resources.xml
-├── CLAUDE.md #claud code context added
-├── Makefile # Build rules for both platforms
-├── Dockerfile # Fedora 40 build environment
-├── CHANGELOG.md # Version history
-└── README.md # This file
+│   ├── main.c                 # Application entry point and UI callbacks
+│   ├── subject.c              # Subject folders, archive save/load and extraction
+│   ├── edit.c                 # Edit base class, editor kinds and factory
+│   ├── menu.c                 # Drop-down menu base class
+│   ├── edit_subclass/
+│   │   ├── editTXT.c          # Plain-text editor (.txt, .md)
+│   │   ├── editDOC.c          # Office viewer through LibreOfficeKit
+│   │   └── editPDF.c          # PDF viewer and annotations through Poppler
+│   └── msc/
+│       ├── menuEditKind.c     # Subject document-kind menu
+│       └── subjectDialog.c    # New subject dialog
+├── include/
+│   ├── subject.h              # Subject data and public operations
+│   ├── edit.h                 # Edit base class interface
+│   ├── menu.h                 # Menu base class interface
+│   ├── edit_subclass/         # Editor headers, including the editUML.h placeholder
+│   ├── msc/                   # Subject menu and dialog headers
+│   └── third_party/LibreOfficeKit/ # Vendored LOK headers, patched for C/Windows
+├── scripts/
+│   └── package-windows.py     # Assemble the executable, DLLs, GTK data and notices
+├── docs/
+│   ├── README.md              # Documentation index and development guidelines
+│   ├── windows.md             # Windows packaging, ZIP commands and runtime checks
+│   ├── class_diagram.md       # Application class diagram
+│   ├── prototype_ia.md        # Development session history
+│   └── *.md                   # Source, interface and build documentation
+├── build/                     # Generated outputs (ignored by Git)
+│   ├── linux/                 # Linux release object files
+│   ├── linux-debug/           # Linux debug object files
+│   ├── win64/                 # Windows release object files
+│   ├── win64-debug/           # Windows debug object files
+│   ├── resources.c            # Generated embedded GTK interface
+│   ├── studystudio-0.1.3_linux
+│   ├── studystudio-0.1.3_linux_debug
+│   ├── studystudio-0.1.3_win64.exe
+│   ├── studystudio-0.1.3_win64_debug.exe
+│   └── studystudio-0.1.3_windows/ # Windows distribution with DLLs and runtime data
+├── interface.ui               # GTK4 interface definition (XML)
+├── resources.xml              # Embedded resource manifest
+├── Makefile                   # Release/debug builds and Windows packaging
+├── Dockerfile                 # Fedora 40 Linux/MinGW build environment
+├── CODEX.md                   # Codex collaboration and code-comment conventions
+├── CLAUDE.md                  # Claude collaboration context
+├── .gitignore                 # Excluded build outputs and local files
+├── LICENSE                    # GPLv3 license
+├── CHANGELOG.md               # Version history
+└── README.md                  # Project overview and build instructions
 ```
+
+Files under `build/` appear when their corresponding targets run. Windows
+package directories can have another name when `WIN64_PACKAGE_DIR` is set.
+ZIP archives are created separately using the commands in [docs/windows.md](docs/windows.md).
 
 ## 📝 Commit Conventions
 

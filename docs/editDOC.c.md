@@ -1,6 +1,6 @@
 # `include/edit_subclass/editDOC.h` and `src/edit_subclass/editDOC.c`
 
-Status: draft for user approval; version 0.1.2. Phase 1 of
+Status: draft for user approval; version 0.1.3. Phase 1 of
 the LibreOfficeKit integration: view and save.
 
 ## Purpose
@@ -17,13 +17,19 @@ these two files.**
 - **Build time:** only the LOK headers, vendored in
   `include/third_party/LibreOfficeKit/` (see [below](#vendored-headers)).
   Nothing is linked: `lok_init()` loads LibreOffice with `dlopen` (Linux) or
-  `LoadLibraryA` (Windows) at run time.
+  `LoadLibraryExW` (Windows) at run time.
 - **Run time:** an installed LibreOffice. `_doc_office()` tries, in order, the
   `STUDYSTUDIO_LO_PATH` environment variable and then:
   - Linux: `/usr/lib64/libreoffice/program` (Fedora),
     `/usr/lib/libreoffice/program` (Debian, Ubuntu),
     `/opt/libreoffice/program`;
   - Windows: `C:\Program Files\LibreOffice\program`.
+
+On Windows, the vendored loader converts UTF-8 paths to UTF-16 and uses
+`LOAD_WITH_ALTERED_SEARCH_PATH` to resolve dependencies beside the loaded DLL.
+Its path checks and process `PATH` update also use wide Windows APIs. A configured
+`STUDYSTUDIO_LO_PATH` is made absolute before initialization. LibreOffice is not
+included in the Windows package; its runtime checks remain pending.
 
 `editDOC.h` only forward-declares `LibreOfficeKitDocument`, so `edit.c` and
 `main.c` do not see the LOK headers. `editDOC.c` defines
@@ -53,6 +59,9 @@ shared by every `EditDOC`.
 
 - `edit_doc_available()` starts LibreOffice if needed and reports whether it
   was found. The factory checks it before creating an `EditDOC`.
+- `edit_doc_started()` (since 2026-10-18) reports whether LibreOffice is
+  running, **without** trying to start it (`s_office != NULL`). `main()`
+  uses it at exit (see below).
 - `open` calls `documentLoad`, then `initializeForRendering` and
   `getDocumentSize`. On failure it prints LibreOffice's error (released with
   `freeError`, because LibreOffice allocated it).
@@ -105,8 +114,15 @@ They contain C++ code that does not compile as C, patched and marked with a
 - `paintTile` runs on every redraw, on the GTK main thread, with no tile
   cache.
 - `s_office` is never destroyed: in the spike, `office->destroy()` crashed
-  with SIGSEGV in an `atexit` handler of `libswlo`. It must still be verified
-  that the application exits cleanly without it.
+  with SIGSEGV in an `atexit` handler of `libswlo`. Without it, the Codex
+  audit of 2026-10-18 (host LibreOffice, not Fedora/Windows) confirmed a
+  SIGSEGV inside `exit()`: static destructors of `libswlo` ask
+  `desktop_LOKClipboard` for the clipboard while LibreOffice is half torn
+  down, printing `Unspecified Application Error`. Workaround (option A):
+  if `edit_doc_started()`, `main()` leaves with `_Exit(status)` and skips
+  those destructors (see [main.c](main.c.md)). Still to try (option B):
+  call `s_office->pClass->destroy(s_office)` after `g_application_run`,
+  once no `EditDOC` is left; if it exits cleanly it replaces `_Exit`.
 - `saveAs` over the same path that was opened has not been tested; the
   fallback is `postUnoCommand(".uno:Save")`.
 - Windows: the install path and `lok_init` on Windows have not been tested at
