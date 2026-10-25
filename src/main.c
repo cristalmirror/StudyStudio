@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-18
+ * Last edited: 2026-10-25
  */
 
 #include <gtk/gtk.h>
@@ -178,9 +178,7 @@ static bool on_subject_dialog_done(const char *name, const char *base_dir,
     }
 
     Subject *subject = new_subject(panel->number);
-    int rc = (subject != NULL)
-           ? subject->make_subject(subject, base_dir, name, folders)
-           : -1;
+    int rc = (subject != NULL) ? subject->make_subject(subject, base_dir, name, folders) : -1;
     g_free(folders);
 
     if (rc != 0) {
