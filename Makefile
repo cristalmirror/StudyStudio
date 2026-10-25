@@ -1,4 +1,6 @@
-NAME      := studystudio-0.1.3
+# Keep the release version aligned with interface.ui and the release notes.
+VERSION   := 0.1.3
+NAME      := studystudio-$(VERSION)
 SRC_DIR   := src
 INCLUDE_DIR := include
 BUILD_DIR := build
@@ -50,7 +52,7 @@ OBJS_WIN64_DEBUG := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64-debug/%.o) $(BUILD_
 # ==========================================
 # Rules
 # ==========================================
-.PHONY: all linux win64 debug win64-debug gdb clean setup
+.PHONY: all linux win64 debug win64-debug win64-package gdb clean setup
 
 all: linux win64
 
@@ -94,6 +96,11 @@ gdb: debug
 
 # --- Windows ---
 win64: $(BUILD_DIR)/$(NAME)_win64.exe
+
+# Use a fresh destination so stale DLLs cannot survive a toolchain upgrade.
+WIN64_PACKAGE_DIR ?= $(BUILD_DIR)/$(NAME)_windows
+win64-package: win64
+	python3 scripts/package-windows.py $(BUILD_DIR)/$(NAME)_win64.exe $(WIN64_PACKAGE_DIR)
 
 $(BUILD_DIR)/$(NAME)_win64.exe: $(OBJS_WIN64)
 	$(CC_WIN64) $(OBJS_WIN64) -o $@ $(LDFLAGS_WIN)
