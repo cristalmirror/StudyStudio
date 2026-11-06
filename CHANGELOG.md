@@ -9,12 +9,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Editing capability contracts in `include/edit.h`: `EditHistory`,
+  `EditClipboard`, `EditMarkup`, `EditInsert`, `EditCombine`. Each editor
+  points to the tables its backend supports (`NULL` otherwise), every
+  operation returns an `EditResult`, and an `EditListener` observer reports
+  state changes and messages. New common `save` / `save_as` on top of the
+  abstract `save_to` (see `docs/edit.c.md`).
+- `EditTXT`: native `GtkTextBuffer` undo/redo, system clipboard, "insert
+  another file"; for Markdown, persistent highlight (`<mark>` with color),
+  clear, pipe tables, rows, columns, images and comments.
+- `EditDOC` is now an editor: keyboard input through a GTK input method
+  (accents, compose), LibreOffice key codes with modifiers, mouse
+  click/drag selection, drawn cursor/selection/active cell, cached
+  rendering, zoom (Ctrl + wheel), sheet/slide selector, and LibreOffice
+  callbacks marshalled to the GTK thread. `editDOCOps.c` maps the tools to
+  UNO commands per application (Writer, Calc, Impress), including
+  clipboard as HTML + text, highlight and shading, images, tables,
+  rows/columns, page breaks, new slides, comments, inserting documents,
+  merging/splitting cells (Calc's merge dialog is answered) and moving
+  slides. Unexpected LibreOffice dialogs are closed instead of blocking.
+- `EditPDF`: select tool, text copy, highlight / shade / clear with the
+  chosen color, note at the selection, whole-file snapshot undo/redo,
+  current page indicator.
+- `include/msc/pdfPages.h`, `src/msc/pdfPages.c`: insert the pages of another
+  PDF and move pages with qpdf, loaded at run time through GModule
+  (`STUDYSTUDIO_QPDF_PATH` or the usual library names); hidden when missing.
+- `include/msc/docToolbar.h`, `src/msc/docToolbar.c`: contextual toolbar with
+  one `GAction` per tool, shown or hidden from the editor's capabilities,
+  color picker, Insert and Combine menus, and Ctrl+S / Ctrl+Shift+S /
+  Ctrl+C/X/V / Ctrl+Z/Y shortcuts.
+- `style.css` (embedded resource): theme-color based styles for light and
+  dark themes; header bar, subject cards, empty-state hint, document status
+  line ("● Sin guardar" / "✓ Guardado") and a loading spinner.
+- Save As, a Save / Discard / Cancel question before closing a modified
+  document, and before closing the window with unsaved documents.
+- `tests/` with GLib tests for the three editors and `make tests` /
+  `make check` (see `docs/tests.md`).
+- Docs: `docToolbar.c.md`, `pdfPages.c.md`, `tests.md`.
+
+### Changed
+
+- `Edit.save` is no longer abstract: subclasses implement `save_to(path)`.
+- `EditDOC.save_to` writes a temporary copy next to the file and renames it
+  over the original (falls back to saving in place if the rename fails).
+- `interface.ui`: `GtkHeaderBar` with "Nueva materia" / "Cargar materia",
+  larger default size, empty-state hint, styled footer.
+- Makefile: `-MMD -MP` header dependency tracking, `gmodule-2.0`, resources
+  depend on `style.css`, `tests` and `check` targets.
+
+### Fixed
+
+- `EditPDF` erase compared annotation positions (PDF coordinates, bottom-left
+  origin) with top-left coordinates, so it only hit annotations near the
+  middle of the page.
+- Changing a header did not rebuild the objects using it (no dependency
+  tracking), which could link `main.o` with an outdated `struct Edit`.
+- `EditDOC`: GTK could deliver focus/draw events to the canvas after the
+  editor was freed; `finalize` now disconnects them.
+
+### Validation
+
+- `make linux win64 tests` build without warnings in `mi_app_builder`
+  (Fedora 40) apart from the existing `subject.c:799` unused parameter.
+- 13/13 tests pass on the developer's Debian host (GTK 4.24.1, Poppler
+  26.07, LibreOffice 26.8.2, libqpdf 30) under Broadway, also when built
+  with AddressSanitizer (no invalid accesses; only fontconfig cache leaks).
+- Screenshots of the real window (Markdown, PDF, Writer, Calc) were checked.
+
+### Known Issues
+
+- Not run on Windows. qpdf is not packaged for Windows (no `mingw64-qpdf` in
+  Fedora 40): PDF page operations stay hidden there unless its DLL is added.
+- LibreOfficeKit features that need a dialog are not offered: comments and
+  "insert slides from file" in Impress, "split cells" in Writer.
+- Copying a selected image/shape from an office document copies no image.
+- Markdown highlight shows as `<mark>` tags in the editor (no preview).
+- PDF page rotation is ignored by annotation coordinates; undo snapshots
+  save the whole file per change.
+- The first office document still blocks the UI while LibreOffice starts.
+
 ### Planned
 
-- Implement CSS custom styles for widgets
 - Add `GtkListView` / `GtkColumnView` for high-performance lists
 - Support for modal dialogs and secondary windows
-- Unit tests with GLib Testing Framework
+- Extend the GLib tests to subjects (`subject.c`) and the UI dialogs
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements

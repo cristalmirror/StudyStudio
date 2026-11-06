@@ -16,6 +16,8 @@ Defines Linux and Windows build recipes, generates embedded resource code, and s
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
 | `win64-debug` | Builds `build/studystudio-0.1.3_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
 | `setup` | Creates platform object directories, including both debug ones. |
+| `tests` | Builds `build/tests/<name>` from every `tests/*.c`, linked with the Linux objects except `main.o` (see [tests](tests.md)). |
+| `check` | Builds and runs the tests; needs a GTK display (desktop or Broadway). Exit code 77 counts as skipped. |
 | `clean` | Empties the contents of `build` and removes the root-level `resources.c`, leaving the `build` directory itself in place. |
 
 ## Inputs and dependencies
@@ -30,6 +32,12 @@ Use `make linux`, `make win64`, or `make all` inside an environment with the req
 
 Since 0.1.0 `SRCS` also discovers `src/edit_subclass/*.c`, and `INCLUDES` is `-Iinclude -Iinclude/third_party`. The second path is for the vendored LibreOfficeKit headers, which include each other as `<LibreOfficeKit/...>` (see [editDOC.c](editDOC.c.md#vendored-headers)). LibreOfficeKit adds no link flags: LibreOffice is loaded at run time with `dlopen` (part of glibc on Fedora 40) or `LoadLibraryExW` (kernel32, always linked by MinGW). Since 0.1.1 `SRCS` also discovers `src/msc/*.c` (menu subclasses); the object rules already create `build/<target>/msc/` with `@mkdir -p $(@D)`. Since 0.1.2, the `pkgconf` calls for both targets ask for `gtk4 poppler-glib`, so `GTK_CFLAGS_*` / `GTK_LIBS_*` carry the Poppler flags used by `EditPDF`, and the link flags add `-lm` (`editPDF.c` uses `ceil`, `lround` and `fabs` from `<math.h>`).
 
+Since 2026-11-06:
+
+- `-MMD -MP` (`DEPFLAGS`) writes a `.d` file next to every object, included at the end of the Makefile, so changing a header (for example `struct Edit`) rebuilds every object that uses it. Before, a stale `main.o` could keep the old struct layout.
+- `pkgconf` also asks for `gmodule-2.0`, used to load libqpdf at run time ([pdfPages.c](pdfPages.c.md)). qpdf itself adds no build or link flags.
+- `build/resources.c` also depends on `style.css`.
+
 ## Current limitations
 
 For distribution, run `make win64-package` in the rebuilt Docker image and
@@ -39,8 +47,8 @@ loaded at runtime. It does not copy Linux libraries or LibreOffice. CI uploads
 this folder alongside the standalone binaries. See [Windows checks](windows.md).
 
 - Source discovery is limited to `src/*.c`, `src/edit_subclass/*.c` and `src/msc/*.c`; other nested modules require updated rules.
-- `HEADERS` (`include/*.h` since 0.1.1, it was `include/.h`) is not used as a prerequisite. Header changes alone do not reliably rebuild dependent objects.
-- There is no test target or compiler-generated header dependency tracking.
+- `HEADERS` is unused; header dependencies come from the generated `.d` files instead.
+- `check` runs the Linux tests only; there is no Windows test run.
 - As of version 0.0.8 both `linux` and `win64` build and link successfully; `include/subject.h` now guards its Windows/POSIX-specific fields and includes correctly, so `subject.c` compiles cleanly on both targets. Version 0.0.9 fixed `main.c` build errors (see [main.c](main.c.md)) and removed a stray declaration from `subject.h` that produced a `-Wunused-function` warning on the Windows build (see [subject.h](subject.h.md)). See [subject.c](subject.c.md) for the remaining implementation limitations.
 - As of version 0.0.13, `win64-debug` gives Windows a debug build target, but there is still no way to actually attach a debugger to it from this toolchain — `gdb` itself only runs against the native Linux `debug` binary. Running `gdb` inside the Docker build container is also not supported out of the box (no `ptrace` capability or display forwarding is configured), so `make gdb` is intended to be run on the host after the object files exist.
 

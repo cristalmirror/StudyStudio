@@ -15,14 +15,17 @@ Each C source/header has its own document. UI resources and build configuration 
 | `src/subject.c` | [Subject implementation](subject.c.md) |
 | `include/edit.h`, `src/edit.c` | [Edit base class and editor factory](edit.c.md) |
 | `include/edit_subclass/editTXT.h`, `src/edit_subclass/editTXT.c` | [Plain-text editor (`EditTXT`)](editTXT.c.md) |
-| `include/edit_subclass/editDOC.h`, `src/edit_subclass/editDOC.c` | [LibreOfficeKit office editor (`EditDOC`)](editDOC.c.md) |
+| `include/edit_subclass/editDOC.h`, `editDOCOps.h`, `src/edit_subclass/editDOC.c`, `editDOCOps.c` | [LibreOfficeKit office editor (`EditDOC`)](editDOC.c.md) |
 | `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c` | [PDF viewer and annotator (`EditPDF`)](editPDF.c.md) |
+| `include/msc/docToolbar.h`, `src/msc/docToolbar.c` | [Document toolbar and editing actions (`DocToolbar`)](docToolbar.c.md) |
+| `include/msc/pdfPages.h`, `src/msc/pdfPages.c` | [PDF page insertion and reordering with qpdf](pdfPages.c.md) |
+| `tests/` | [Automated tests](tests.md) |
 | `include/menu.h`, `src/menu.c`, `include/msc/menuEditKind.h`, `src/msc/menuEditKind.c` | [Menu base class and the subject menu (`MenuEditKind`)](menu.c.md) |
 | `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c` | ["Nueva materia" dialog (`SubjectDialog`)](subjectDialog.c.md) |
 | `include/third_party/LibreOfficeKit/` | Vendored, patched LibreOfficeKit headers (see [editDOC.c](editDOC.c.md#vendored-headers)) |
 | — | [Class diagram](class_diagram.md) |
 | `build/resources.c` (generated) | [Generated resource source](resources.c.md) |
-| `interface.ui` | [GTK interface definition](interface.ui.md) |
+| `interface.ui`, `style.css` | [GTK interface definition and styles](interface.ui.md) |
 | `resources.xml` | [Resource manifest](resources.xml.md) |
 | `Makefile` | [Build rules](Makefile.md) |
 | `Dockerfile` | [Build environment](Dockerfile.md) |

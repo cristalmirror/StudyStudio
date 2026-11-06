@@ -118,10 +118,19 @@ classDiagram
         +char* path
         +bool modified
         +GtkWidget* widget
+        +const EditHistory* history
+        +const EditClipboard* clipboard
+        +const EditMarkup* markup
+        +const EditInsert* insert
+        +const EditCombine* combine
         +open(const char* path)* int
-        +save()* int
+        #save_to(const char* path)* int
         +render(GtkWidget* container)* void
         #finalize()* void
+        +save() int
+        +save_as(const char* path) int
+        +set_listener(EditListener fn, gpointer data) void
+        #notify(const char* message) void
         +close() void
         +is_modified() bool
         #mark_modified(bool modified) void
@@ -134,11 +143,12 @@ classDiagram
     class EditTXT {
         -Edit base
         -GtkTextBuffer* buffer
-        -gulong modified_id
+        -GtkWidget* view
+        -bool markdown
         +const char* edit_txt_suffixes[]$
         +new_edit_txt()$ Edit*
         +open(const char* path) int
-        +save() int
+        #save_to(const char* path) int
         +render(GtkWidget* container) void
         #finalize() void
     }
@@ -148,15 +158,18 @@ classDiagram
         -LibreOfficeKitDocument* lok
         -long width_twips
         -long height_twips
+        -int doc_type
+        -EditDOCLink* link
         -GtkWidget* area
-        -GtkAdjustment* vadj
+        -GtkAdjustment* hadj, vadj
+        -GtkIMContext* im
         -LibreOfficeKit* s_office$
         +const char* edit_doc_suffixes[]$
         +new_edit_doc()$ Edit*
         +edit_doc_available()$ bool
         +edit_doc_started()$ bool
         +open(const char* path) int
-        +save() int
+        #save_to(const char* path) int
         +render(GtkWidget* container) void
         #finalize() void
     }
@@ -272,7 +285,7 @@ classDiagram
     LibreOfficeKit ..> LibreOfficeKitDocument : documentLoad()
 
     note for Subject "Methods are function pointers assigned in new_subject()\nand called as self->method(self, ...)"
-    note for Edit "Abstract methods are NULL in edit_init().\nEach subclass embeds Edit as its first member\nand assigns its own open/save/render/finalize.\nrender stores its widget with set_widget (weak pointer)."
+    note for Edit "Abstract methods are NULL in edit_init().\nEach subclass embeds Edit as its first member\nand assigns its own open/save_to/render/finalize.\nrender stores its widget with set_widget (weak pointer)."
     note for SubjectDialog "Freed with its window\n(g_object_set_data_full), never by the caller."
     note for Menu "The Menu is freed with its popover\n(g_object_set_data_full), never by the caller."
     note for EditDOC "All LibreOfficeKit code lives in editDOC.c.\ns_office is a process-wide singleton\nand is never destroyed."
@@ -321,11 +334,14 @@ classDiagram
 | `SubjectLogger` | `SubjectLogFunc` | Stores the registered callback in `g_log_fn` via `subject_set_logger()`. |
 | `Subject` | `SubjectLogger` | Reports status and errors through `subject_log()`. |
 | `Subject` | `WalkContext` | Windows `walk_directory()` uses it to carry the output file and LZMA stream. |
-| `EditTXT`, `EditDOC` | `Edit` | Inheritance: each subclass embeds `Edit` as its first member, calls `edit_init()`, reuses the common operations (`close`, `is_modified`, `mark_modified`, `set_path`) and implements the abstract ones (`open`, `save`, `render`, `finalize`). |
+| `EditTXT`, `EditDOC` | `Edit` | Inheritance: each subclass embeds `Edit` as its first member, calls `edit_init()`, reuses the common operations (`save`, `save_as`, `close`, `is_modified`, `mark_modified`, `set_path`, `notify`) and implements the abstract ones (`open`, `save_to`, `render`, `finalize`). |
 | `Edit` | `EditTXT`, `EditDOC` | Factory: `new_edit_for_path()` picks the subclass by searching `edit_txt_suffixes` / `edit_doc_suffixes` (the latter only if `edit_doc_available()`), then calls `open()`. |
 | `EditDOC` | `LibreOfficeKitDocument` | Aggregation: owns the loaded document (`lok`) and calls `destroy()` on it in `finalize`. |
 | `EditDOC` | `LibreOfficeKit` | Uses the process-wide `s_office` created once by `lok_init()`; it is shared by every `EditDOC` and never destroyed. |
-| `EditPDF` | `Edit` | PDF viewer/annotator backed by Poppler (see [editPDF.c](editPDF.c.md)). |
+| `EditPDF` | `Edit` | PDF selection/annotation editor backed by Poppler (see [editPDF.c](editPDF.c.md)); page operations through `pdfPages` (qpdf). |
+| `EditTXT`, `EditDOC`, `EditPDF` | `EditHistory`, `EditClipboard`, `EditMarkup`, `EditInsert`, `EditCombine` | Realization (since 2026-11-06): each editor points to the capability tables its backend supports, `NULL` for the rest (see [edit.c](edit.c.md#capability-contracts)). `EditDOC` picks Writer, Calc or Impress tables in `open` (`editDOCOps.c`). |
+| `DocToolbar` | `Edit` contracts | Uses only the contracts, never a concrete editor; one `GAction` per tool, hidden when the editor lacks it (see [docToolbar.c](docToolbar.c.md)). |
+| `MainGUI` (`SubjectPanel`) | `DocToolbar` | Owns one per subject card and implements `DocToolbarOwner` (save, save as, close with confirmation, status). |
 | `EditUML`, `EditCode` | `Edit` | **Planned, not implemented.** Same inheritance contract as `EditTXT`/`EditDOC`. |
 
 ## `Edit` hierarchy
@@ -344,7 +360,7 @@ struct Edit {
 
     /* abstract: assigned by each subclass */
     int  (*open)(Edit *self, const char *path);
-    int  (*save)(Edit *self);
+    int  (*save_to)(Edit *self, const char *path);   /* since 2026-11-06 */
     void (*render)(Edit *self, GtkWidget *container);
     void (*finalize)(Edit *self);
 

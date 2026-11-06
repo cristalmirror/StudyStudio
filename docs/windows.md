@@ -56,6 +56,12 @@ LibreOffice remains a separate 64-bit installation, normally at
 `STUDYSTUDIO_LO_PATH` to its `program` directory. The loader converts UTF-8 paths
 to UTF-16 and searches for dependencies beside the loaded LibreOffice DLL.
 
+PDF page operations (insert pages from another PDF, move pages) need qpdf,
+which Fedora 40 does not package for MinGW, so the package does not include
+it and those menu entries are hidden. To enable them, put qpdf's DLL
+(`qpdf30.dll` or `libqpdf30.dll` from an official qpdf Windows release)
+next to the executable or set `STUDYSTUDIO_QPDF_PATH` to its full path.
+
 Run these checks on Windows without MinGW/MSYS2 on `PATH`:
 
 1. Start the packaged executable directly from Explorer. Confirm that there is
@@ -71,6 +77,12 @@ Run these checks on Windows without MinGW/MSYS2 on `PATH`:
    Close StudyStudio and check that no crash dialog appears.
 5. Open a PDF with the packaged Poppler DLLs, add an annotation, save, close and
    reopen it. Confirm that the annotation persists.
+6. In an office document: type text with accents (á, ñ, dead keys), select
+   with the mouse, copy to Notepad and paste back, highlight, undo, save over
+   the same file (StudyStudio falls back to saving in place if Windows refuses
+   to replace a file LibreOffice keeps open) and reopen.
+7. With qpdf available: insert a PDF into another and move a page; save and
+   reopen.
 
 Windows subject archives currently contain custom records compressed with XZ,
 even if named `.tar.xz`; they are not Linux TAR archives. Test a file saved by

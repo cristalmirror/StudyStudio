@@ -34,8 +34,11 @@ The project showcases:
 - 📦 **Dynamic widgets**: Add elements to the UI at runtime
 - 📜 **Scrollable content**: `GtkScrolledWindow` for handling long lists
 - ⚡ **Fast builds**: Uses precompiled Fedora packages instead of building from source
-- 📄 **Office documents (in development)**: `.docx`, `.odt`, `.xlsx`, `.pptx`... are opened through LibreOfficeKit; it needs LibreOffice installed at run time (or `STUDYSTUDIO_LO_PATH` pointing to its `program` folder)
-- 📕 **PDF (in development)**: `.pdf` files are shown with Poppler (poppler-glib) and can be annotated (highlight, rectangle, sticky notes, erase) and saved
+- 📝 **Text and Markdown**: typing, undo/redo, clipboard, inserting another file; in `.md` also highlight (`<mark>`), tables, rows, columns, images and comments
+- 📄 **Office documents (in development)**: `.docx`, `.odt`, `.xlsx`, `.pptx`... are edited through LibreOfficeKit (keyboard with accents, mouse selection, clipboard, undo/redo, highlight and shading, tables, images, comments, page breaks / slides, merge cells, insert documents); it needs LibreOffice installed at run time (or `STUDYSTUDIO_LO_PATH` pointing to its `program` folder)
+- 📕 **PDF (in development)**: `.pdf` files are shown with Poppler (poppler-glib): select and copy text, highlight and shade in any color, rectangles, sticky notes, erase, undo/redo; with qpdf installed also insert pages from another PDF and reorder pages
+- 🧰 **Contextual toolbar**: only the tools the open format really supports, with shortcuts (Ctrl+S, Ctrl+Z, Ctrl+C...) and a confirmation before closing unsaved documents
+- 🧪 **Tests**: `make tests` / `make check` (GLib testing framework, see `docs/tests.md`)
 
 ---
 
@@ -142,12 +145,15 @@ StudyStudio/
 │   ├── edit.c                 # Edit base class, editor kinds and factory
 │   ├── menu.c                 # Drop-down menu base class
 │   ├── edit_subclass/
-│   │   ├── editTXT.c          # Plain-text editor (.txt, .md)
-│   │   ├── editDOC.c          # Office viewer through LibreOfficeKit
-│   │   └── editPDF.c          # PDF viewer and annotations through Poppler
+│   │   ├── editTXT.c          # Text / Markdown editor (GtkTextView)
+│   │   ├── editDOC.c          # Office editor through LibreOfficeKit (view, input)
+│   │   ├── editDOCOps.c       # Office editing tools (UNO commands per app)
+│   │   └── editPDF.c          # PDF selection, annotations and undo through Poppler
 │   └── msc/
 │       ├── menuEditKind.c     # Subject document-kind menu
-│       └── subjectDialog.c    # New subject dialog
+│       ├── subjectDialog.c    # New subject dialog
+│       ├── docToolbar.c       # Document toolbar: GActions per editing capability
+│       └── pdfPages.c         # PDF page insert/move with qpdf (loaded at run time)
 ├── include/
 │   ├── subject.h              # Subject data and public operations
 │   ├── edit.h                 # Edit base class interface
@@ -174,7 +180,9 @@ StudyStudio/
 │   ├── studystudio-0.1.3_win64.exe
 │   ├── studystudio-0.1.3_win64_debug.exe
 │   └── studystudio-0.1.3_windows/ # Windows distribution with DLLs and runtime data
+├── tests/                     # GLib tests of the editors (make tests / make check)
 ├── interface.ui               # GTK4 interface definition (XML)
+├── style.css                  # GTK CSS styles (light and dark themes)
 ├── resources.xml              # Embedded resource manifest
 ├── Makefile                   # Release/debug builds and Windows packaging
 ├── Dockerfile                 # Fedora 40 Linux/MinGW build environment
