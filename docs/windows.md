@@ -16,7 +16,7 @@ image, not the Debian host. `make all` builds standalone Linux and Windows
 binaries; `make win64-package` additionally gathers the Windows runtime.
 
 Rebuild the Docker image after dependency changes, then run `make win64-package`
-inside it. This creates `build/studystudio-0.1.3_windows/`. Copy the entire
+inside it. This creates `build/studystudio-0.1.4_windows/`. Copy the entire
 directory to Windows; the DLLs must remain beside the executable and the data
 directories must retain their structure. Repackaging refuses an existing output
 directory to avoid mixing old and new runtimes. Choose another destination with
@@ -36,8 +36,8 @@ that specific link; other copying errors still fail the operation.
 To create a ZIP on Linux after packaging:
 
 ```bash
-python3 -m zipfile -c build/studystudio-0.1.3_windows.zip build/studystudio-0.1.3_windows
-python3 -m zipfile -t build/studystudio-0.1.3_windows.zip
+python3 -m zipfile -c build/studystudio-0.1.4_windows.zip build/studystudio-0.1.4_windows
+python3 -m zipfile -t build/studystudio-0.1.4_windows.zip
 ```
 
 Extract the entire ZIP on Windows before launching the executable.

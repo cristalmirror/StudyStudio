@@ -2,7 +2,7 @@
 
 > A cross-platform GTK4 desktop application written in C, built with a unified Docker-based toolchain for Linux and Windows.
 
-[![Version](https://img.shields.io/badge/version-0.1.3-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.4-orange)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)]()
 [![GTK](https://img.shields.io/badge/GTK-4.0-8A2BE2)](https://www.gtk.org/)
@@ -10,7 +10,7 @@
 ---
 
 > [!WARNING]
-> **This project is in early development (v0.1.3).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
+> **This project is in early development (v0.1.4).** The build system is fully functional, but the application itself is not yet complete. Use for development and learning purposes only.
 
 ---
 
@@ -44,7 +44,7 @@ The project showcases:
 
 ## Compilation
 
-The current source version is **0.1.3**, defined by `VERSION` in the Makefile
+The current source version is **0.1.4**, defined by `VERSION` in the Makefile
 and displayed in the XML window title. The Windows runtime package includes
 GTK and Poppler DLLs; LibreOffice remains a separate installation.
 
@@ -60,7 +60,7 @@ docker run --rm \
   studystudio-builder make all
 
 # Run the Linux binary on Linux.
-./build/studystudio-0.1.3_linux
+./build/studystudio-0.1.4_linux
 ```
 
 To distribute Windows, additionally assemble the executable and its DLLs:
@@ -73,7 +73,7 @@ docker run --rm \
   studystudio-builder make win64-package
 ```
 
-Copy the entire `build/studystudio-0.1.3_windows/` folder to Windows and run
+Copy the entire `build/studystudio-0.1.4_windows/` folder to Windows and run
 its `.exe`. `make all` alone does not gather DLLs. Install 64-bit LibreOffice
 separately for office documents. Packaging requires a fresh destination;
 set `WIN64_PACKAGE_DIR=build/windows-new` to use another folder.
@@ -115,7 +115,7 @@ docker run --rm \
 Once the debug binary exists, run GDB directly on the host, the same way you already run the release binary:
 
 ```
-gdb ./build/studystudio-0.1.3_linux_debug
+gdb ./build/studystudio-0.1.4_linux_debug
 ```
 
 Inside GDB:
@@ -131,7 +131,7 @@ There's also a `make gdb` shortcut that rebuilds `debug` and launches GDB in one
 make gdb
 ```
 
-A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.1.3_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
+A Windows debug variant is also available via `make win64-debug`, producing `build/studystudio-0.1.4_win64_debug.exe` with the same `-g -O0 -DDEBUG` flags, in its own `build/win64-debug/` object directory. There is no `gdb`-equivalent shortcut for it: cross-debugging a MinGW-w64 binary needs `winedbg`/Wine, which this toolchain does not set up, so the binary is for standalone testing (e.g. running it under Wine) rather than in-container debugging.
 
 ## 📂 Project Structure
 
@@ -175,11 +175,11 @@ StudyStudio/
 │   ├── win64/                 # Windows release object files
 │   ├── win64-debug/           # Windows debug object files
 │   ├── resources.c            # Generated embedded GTK interface
-│   ├── studystudio-0.1.3_linux
-│   ├── studystudio-0.1.3_linux_debug
-│   ├── studystudio-0.1.3_win64.exe
-│   ├── studystudio-0.1.3_win64_debug.exe
-│   └── studystudio-0.1.3_windows/ # Windows distribution with DLLs and runtime data
+│   ├── studystudio-0.1.4_linux
+│   ├── studystudio-0.1.4_linux_debug
+│   ├── studystudio-0.1.4_win64.exe
+│   ├── studystudio-0.1.4_win64_debug.exe
+│   └── studystudio-0.1.4_windows/ # Windows distribution with DLLs and runtime data
 ├── tests/                     # GLib tests of the editors (make tests / make check)
 ├── interface.ui               # GTK4 interface definition (XML)
 ├── style.css                  # GTK CSS styles (light and dark themes)

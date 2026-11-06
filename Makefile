@@ -1,5 +1,5 @@
 # Keep the release version aligned with interface.ui and the release notes.
-VERSION   := 0.1.3
+VERSION   := 0.1.4
 NAME      := studystudio-$(VERSION)
 SRC_DIR   := src
 INCLUDE_DIR := include

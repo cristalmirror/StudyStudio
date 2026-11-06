@@ -1,6 +1,6 @@
 # `tests/`
 
-Status: draft for user approval; version 0.1.3 (added 2026-11-06).
+Status: draft for user approval; version 0.1.4 (added 2026-11-06).
 
 ## Purpose
 

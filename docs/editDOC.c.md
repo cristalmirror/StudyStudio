@@ -1,6 +1,6 @@
 # `include/edit_subclass/editDOC.h`, `editDOCOps.h`, `src/edit_subclass/editDOC.c`, `editDOCOps.c`
 
-Status: draft for user approval; version 0.1.3. Since 2026-11-06 an editor
+Status: draft for user approval; version 0.1.4. Since 2026-11-06 an editor
 (keyboard, mouse, clipboard, tools), no longer view-only. Covered by
 `tests/test_edit_doc.c` against a real LibreOffice (see [tests](tests.md)).
 

@@ -1,6 +1,6 @@
 # `include/msc/pdfPages.h` and `src/msc/pdfPages.c`
 
-Status: draft for user approval; version 0.1.3 (added 2026-11-06). Covered
+Status: draft for user approval; version 0.1.4 (added 2026-11-06). Covered
 by `tests/test_edit_pdf.c` (`/edit-pdf/pages`).
 
 ## Purpose

@@ -1,6 +1,6 @@
 # `include/edit_subclass/editTXT.h` and `src/edit_subclass/editTXT.c`
 
-Status: draft for user approval; version 0.1.3 (editing tools added
+Status: draft for user approval; version 0.1.4 (editing tools added
 2026-11-06). Covered by `tests/test_edit_txt.c` (see [tests](tests.md)).
 
 ## Purpose

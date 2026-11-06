@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.3
+ * Version: 0.1.4
  * License: GPLv3
- * Last edited: 2026-10-25
+ * Last edited: 2026-11-06
  */
 /*
  * Common operations of the Menu hierarchy.

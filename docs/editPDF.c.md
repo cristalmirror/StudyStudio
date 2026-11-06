@@ -1,6 +1,6 @@
 # `include/edit_subclass/editPDF.h` and `src/edit_subclass/editPDF.c`
 
-Status: draft for user approval; version 0.1.3 (selection, colors, undo and
+Status: draft for user approval; version 0.1.4 (selection, colors, undo and
 page operations added 2026-11-06). Covered by `tests/test_edit_pdf.c` (see
 [tests](tests.md)); the mouse tools still need a manual check on a desktop.
 

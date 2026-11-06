@@ -1,20 +1,20 @@
 # `Makefile`
 
-Status: draft for user approval; version 0.1.3.
+Status: draft for user approval; version 0.1.4.
 
 ## Purpose
 
-Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.1.3`.
+Defines Linux and Windows build recipes, generates embedded resource code, and stores artifacts under `build`. The executable base name is `studystudio-0.1.4`.
 
 | Target | Behavior |
 | --- | --- |
 | `all` | Requests both Linux and Windows builds; default target. |
-| `linux` | Builds `build/studystudio-0.1.3_linux` with GCC. |
-| `win64` | Builds `build/studystudio-0.1.3_win64.exe` with MinGW-w64. |
-| `win64-package` | Builds Windows and assembles `build/studystudio-0.1.3_windows/` with the executable, MinGW DLLs (including Poppler's dependencies), GTK data and dependency notices. Requires Python 3 and a fresh output directory; override with `WIN64_PACKAGE_DIR=...`. |
-| `debug` | Builds `build/studystudio-0.1.3_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
+| `linux` | Builds `build/studystudio-0.1.4_linux` with GCC. |
+| `win64` | Builds `build/studystudio-0.1.4_win64.exe` with MinGW-w64. |
+| `win64-package` | Builds Windows and assembles `build/studystudio-0.1.4_windows/` with the executable, MinGW DLLs (including Poppler's dependencies), GTK data and dependency notices. Requires Python 3 and a fresh output directory; override with `WIN64_PACKAGE_DIR=...`. |
+| `debug` | Builds `build/studystudio-0.1.4_linux_debug` with GCC, unoptimized and with debug symbols, for use with GDB. |
 | `gdb` | Depends on `debug`; launches GDB against the resulting debug binary. |
-| `win64-debug` | Builds `build/studystudio-0.1.3_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
+| `win64-debug` | Builds `build/studystudio-0.1.4_win64_debug.exe` with MinGW-w64, unoptimized and with debug symbols, mirroring `debug` for Windows. |
 | `setup` | Creates platform object directories, including both debug ones. |
 | `tests` | Builds `build/tests/<name>` from every `tests/*.c`, linked with the Linux objects except `main.o` (see [tests](tests.md)). |
 | `check` | Builds and runs the tests; needs a GTK display (desktop or Broadway). Exit code 77 counts as skipped. |

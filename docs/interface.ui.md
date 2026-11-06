@@ -1,10 +1,10 @@
 # `interface.ui`
 
-Status: draft for user approval; version 0.1.3.
+Status: draft for user approval; version 0.1.4.
 
 ## Purpose and structure
 
-Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `StudyStudio-0.1.3`, with a default size of 1100 by 760. Since 2026-11-06 the window uses a `GtkHeaderBar` (title "StudyStudio") that holds the two main actions, and its look comes from `style.css` (see [below](#styles)).
+Defines the GTK4 layout consumed by `GtkBuilder`. The main window is titled `StudyStudio-0.1.4`, with a default size of 1100 by 760. Since 2026-11-06 the window uses a `GtkHeaderBar` (title "StudyStudio") that holds the two main actions, and its look comes from `style.css` (see [below](#styles)).
 
 | Object ID | Role |
 | --- | --- |

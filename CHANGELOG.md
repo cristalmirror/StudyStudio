@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+
+- Add `GtkListView` / `GtkColumnView` for high-performance lists
+- Support for modal dialogs and secondary windows
+- Extend the GLib tests to subjects (`subject.c`) and the UI dialogs
+- Internal API documentation
+- Complete functional testing for both Linux and Windows builds
+- User documentation and `README.md` improvements
+
+## [0.1.4] - 2026-11-06
+
 ### Added
 
 - Editing capability contracts in `include/edit.h`: `EditHistory`,
@@ -51,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bumped the project version to `0.1.4`: `Makefile`'s `VERSION`, the window
+  title in `interface.ui`, `resources.xml` and `style.css` notes, the
+  `Version` / `Last edited` fields of every source header, `README.md`,
+  `CLAUDE.md` and the version / binary names across `docs/*.md`.
 - `Edit.save` is no longer abstract: subclasses implement `save_to(path)`.
 - `EditDOC.save_to` writes a temporary copy next to the file and renames it
   over the original (falls back to saving in place if the rename fails).
@@ -89,15 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDF page rotation is ignored by annotation coordinates; undo snapshots
   save the whole file per change.
 - The first office document still blocks the UI while LibreOffice starts.
-
-### Planned
-
-- Add `GtkListView` / `GtkColumnView` for high-performance lists
-- Support for modal dialogs and secondary windows
-- Extend the GLib tests to subjects (`subject.c`) and the UI dialogs
-- Internal API documentation
-- Complete functional testing for both Linux and Windows builds
-- User documentation and `README.md` improvements
 
 ## [0.1.3] - 2026-10-25
 

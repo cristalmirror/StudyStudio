@@ -1,6 +1,6 @@
 # `.github/workflows/build.yml`
 
-Status: draft for user approval; version 0.1.3.
+Status: draft for user approval; version 0.1.4.
 
 ## Purpose
 
@@ -13,9 +13,9 @@ Defines a GitHub Actions workflow that builds StudyStudio on every push and pull
 | Checkout code | Clones the repository via `actions/checkout@v4`. |
 | Build Docker toolchain image | Builds the `studystudio-builder` image from the repository `Dockerfile`. |
 | Compile Linux + Windows binaries (release) | Runs `make all` inside the container, bind-mounting `src`, `include`, `build`, `Makefile`, `resources.xml`, and `interface.ui` — the same command documented in the [repository README](../README.md#compilation). |
-| Compile Linux binary (debug) | Runs `make debug` inside the same container and volume layout, producing `build/studystudio-0.1.3_linux_debug` (see [Makefile](Makefile.md)). |
-| Compile Windows binary (debug) | Runs `make win64-debug` inside the same container and volume layout, producing `build/studystudio-0.1.3_win64_debug.exe` (see [Makefile](Makefile.md)). |
-| Package Windows runtime DLLs and GTK data | Runs `make win64-package` with the host `build` directory mounted. The script and toolchain come from the freshly built image. Produces `build/studystudio-0.1.3_windows/`. |
+| Compile Linux binary (debug) | Runs `make debug` inside the same container and volume layout, producing `build/studystudio-0.1.4_linux_debug` (see [Makefile](Makefile.md)). |
+| Compile Windows binary (debug) | Runs `make win64-debug` inside the same container and volume layout, producing `build/studystudio-0.1.4_win64_debug.exe` (see [Makefile](Makefile.md)). |
+| Package Windows runtime DLLs and GTK data | Runs `make win64-package` with the host `build` directory mounted. The script and toolchain come from the freshly built image. Produces `build/studystudio-0.1.4_windows/`. |
 | Verify binaries were produced | Fails the job if the release Linux binary, release Windows binary, debug Linux binary, or debug Windows binary is missing from `build/`. |
 | Upload binaries as artifacts | Publishes the four binaries and the complete Windows package directory via `actions/upload-artifact@v4`. The workflow does not create a separate distributable ZIP. |
 
