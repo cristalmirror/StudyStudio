@@ -11,16 +11,20 @@ RESOURCE_SRC := $(BUILD_DIR)/resources.c
 # ==========================================
 CC_LINUX  := gcc
 # poppler-glib: PDF rendering/annotations for EditPDF (GPLv2+, GPLv3-compatible)
-GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4 poppler-glib)
-GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4 poppler-glib)
+# gmodule-2.0: loads the optional qpdf library at run time (msc/pdfPages.c)
+GTK_CFLAGS_LINUX := $(shell PKG_CONFIG_PATH="" pkgconf --cflags gtk4 poppler-glib gmodule-2.0)
+GTK_LIBS_LINUX   := $(shell PKG_CONFIG_PATH="" pkgconf --libs gtk4 poppler-glib gmodule-2.0)
 
 INCLUDES := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/third_party
+# -MMD -MP: every .o also gets a .d file listing the headers it includes,
+# so changing a header (e.g. struct Edit) rebuilds every object using it
+DEPFLAGS := -MMD -MP
 
-CFLAGS_LINUX  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
+CFLAGS_LINUX  := $(DEPFLAGS) -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_LINUX)
 LDFLAGS_LINUX := $(GTK_LIBS_LINUX) -larchive -llzma -lm
 
 # --- Debug variant (unoptimized, with symbols for GDB) ---
-CFLAGS_LINUX_DEBUG := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_LINUX)
+CFLAGS_LINUX_DEBUG := $(DEPFLAGS) -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_LINUX)
 
 # ==========================================
 # 2. Windows compilation (MinGW-w64)
@@ -28,14 +32,14 @@ CFLAGS_LINUX_DEBUG := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_LINU
 CC_WIN64  := x86_64-w64-mingw32-gcc
 MINGW_PKG_PATH := /usr/x86_64-w64-mingw32/sys-root/mingw/lib/pkgconfig
 
-GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk4 poppler-glib)
-GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4 poppler-glib)
+GTK_CFLAGS_WIN := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --cflags gtk4 poppler-glib gmodule-2.0)
+GTK_LIBS_WIN   := $(shell PKG_CONFIG_PATH=$(MINGW_PKG_PATH) pkgconf --libs gtk4 poppler-glib gmodule-2.0)
 
-CFLAGS_WIN  := -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
+CFLAGS_WIN  := $(DEPFLAGS) -Wall -Wextra -O2 $(INCLUDES) $(GTK_CFLAGS_WIN)
 LDFLAGS_WIN := $(GTK_LIBS_WIN) -larchive -llzma -lm -mwindows -static-libgcc
 
 # --- Debug variant (unoptimized, with symbols) ---
-CFLAGS_WIN_DEBUG  := -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_WIN)
+CFLAGS_WIN_DEBUG  := $(DEPFLAGS) -Wall -Wextra -g -O0 -DDEBUG $(INCLUDES) $(GTK_CFLAGS_WIN)
 LDFLAGS_WIN_DEBUG := $(GTK_LIBS_WIN) -larchive -llzma -lm -static-libgcc
 
 # ==========================================
@@ -52,7 +56,7 @@ OBJS_WIN64_DEBUG := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/win64-debug/%.o) $(BUILD_
 # ==========================================
 # Rules
 # ==========================================
-.PHONY: all linux win64 debug win64-debug win64-package gdb clean setup
+.PHONY: all linux win64 debug win64-debug win64-package gdb clean setup tests check
 
 all: linux win64
 
@@ -60,7 +64,7 @@ setup:
 	@mkdir -p $(BUILD_DIR)/linux $(BUILD_DIR)/win64 $(BUILD_DIR)/linux-debug $(BUILD_DIR)/win64-debug
 
 # --- Generate resources.c ---
-$(RESOURCE_SRC): resources.xml interface.ui | setup
+$(RESOURCE_SRC): resources.xml interface.ui style.css | setup
 	glib-compile-resources --generate-source --target=$@ $<
 
 # --- Linux ---
@@ -94,6 +98,25 @@ $(BUILD_DIR)/linux-debug/resources.o: $(RESOURCE_SRC) | setup
 gdb: debug
 	gdb $(BUILD_DIR)/$(NAME)_linux_debug
 
+# --- Tests (GLib testing framework, Linux objects without main.o) ---
+TEST_SRCS := $(wildcard tests/*.c)
+TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD_DIR)/tests/%)
+APP_OBJS_LINUX := $(filter-out $(BUILD_DIR)/linux/main.o,$(OBJS_LINUX))
+
+tests: $(TEST_BINS)
+
+$(BUILD_DIR)/tests/%: tests/%.c $(APP_OBJS_LINUX) | setup
+	@mkdir -p $(@D)
+	$(CC_LINUX) $(CFLAGS_LINUX) $< $(APP_OBJS_LINUX) -o $@ $(LDFLAGS_LINUX)
+
+# needs a GTK display (desktop, or Broadway: see tests/test_common.h);
+# exit code 77 means "skipped" (e.g. LibreOffice not installed)
+check: tests
+	@for t in $(TEST_BINS); do \
+		echo "== $$t"; $$t; rc=$$?; \
+		if [ $$rc -ne 0 ] && [ $$rc -ne 77 ]; then exit $$rc; fi; \
+	done
+
 # --- Windows ---
 win64: $(BUILD_DIR)/$(NAME)_win64.exe
 
@@ -126,6 +149,9 @@ $(BUILD_DIR)/win64-debug/%.o: $(SRC_DIR)/%.c | setup
 
 $(BUILD_DIR)/win64-debug/resources.o: $(RESOURCE_SRC) | setup
 	$(CC_WIN64) $(CFLAGS_WIN_DEBUG) -c $< -o $@
+
+# header dependencies written by -MMD (missing on the first build: ignored)
+-include $(wildcard $(BUILD_DIR)/*/*.d $(BUILD_DIR)/*/*/*.d)
 
 # --- Cleanup ---
 clean:

@@ -3,10 +3,11 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.3
  * License: GPLv3
- * Last edited: 2026-10-25
+ * Last edited: 2026-11-06
  */
 
-/* PDF editor (.pdf) backed by Poppler: view, annotate and save. */
+/* PDF editor (.pdf) backed by Poppler: view, select, annotate and save.
+ * Page insertion and reordering use qpdf when it is installed (pdfPages). */
 #ifndef EDIT_PDF_H
 #define EDIT_PDF_H
 
@@ -20,6 +21,7 @@ typedef struct _PopplerPage PopplerPage;
 /* what a click / drag on a page does */
 typedef enum {
     EDIT_PDF_TOOL_VIEW,        /* nothing: only read and scroll */
+    EDIT_PDF_TOOL_SELECT,      /* drag: select text/area for copy, highlight, shade */
     EDIT_PDF_TOOL_HIGHLIGHT,   /* drag over text: highlight annotation */
     EDIT_PDF_TOOL_RECT,        /* drag: rectangle (square) annotation */
     EDIT_PDF_TOOL_NOTE,        /* click: sticky note with the toolbar text */
@@ -33,6 +35,11 @@ typedef struct {
     const char *tooltip;
 } EditPDFToolInfo;
 
+/* rectangle in PDF points, origin at the TOP-left corner of the page */
+typedef struct {
+    double x1, y1, x2, y2;
+} EditPDFArea;
+
 /* one page and its widget: EditPDF and EditPDFPage point to each other,
  * so the name is declared here and the struct after EditPDF */
 typedef struct EditPDFPage EditPDFPage;
@@ -44,8 +51,15 @@ typedef struct {
     EditPDFPage *pages;        /* array of n_pages, NULL until open */
     double zoom;               /* pixels per PDF point (1 point = 1/72 inch) */
     EditPDFTool tool;          /* tool chosen in the toolbar */
+    GdkRGBA color;             /* color of the interactive tools */
+    int current_page;          /* last page clicked, -1: none yet */
+    int sel_page;              /* page holding the selection, -1: none */
+    EditPDFArea sel;           /* the selection on sel_page */
+    GPtrArray *undo;           /* GBytes: whole file before each change */
+    GPtrArray *redo;
     GtkWidget *pages_box;      /* vertical GtkBox with one GtkDrawingArea per page */
     GtkWidget *zoom_label;     /* "100 %" */
+    GtkWidget *page_label;     /* "Pág. 2 / 9" */
     GtkWidget *note_entry;     /* text of the next sticky note */
 } EditPDF;
 
@@ -67,5 +81,8 @@ struct EditPDFPage {
 extern const char *const edit_pdf_suffixes[];
 
 Edit *new_edit_pdf(void);
+
+/* selects an area of a page (what the select tool does); false if invalid */
+bool edit_pdf_select(Edit *self, int page, const EditPDFArea *area);
 
 #endif
