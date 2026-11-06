@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `EditDOC`: the text cursor was never drawn and typed or deleted text only
+  appeared after scrolling. LibreOffice 26.8 sends neither
+  `CURSOR_VISIBLE "true"` nor `INVALIDATE_TILES` after edits, so the cursor
+  now starts visible and the cursor, selection, active cell and state
+  callbacks also repaint the view (see `docs/editDOC.c.md`).
+
 ### Planned
 
 - Add `GtkListView` / `GtkColumnView` for high-performance lists

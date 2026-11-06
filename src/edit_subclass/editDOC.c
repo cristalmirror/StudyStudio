@@ -356,7 +356,9 @@ static gboolean _doc_dispatch(gpointer data) {
         if (_doc_parse_rect(p, &doc->cursor)) {
             if (doc->follow_cursor) _doc_scroll_to_cursor(doc);
             doc->follow_cursor = false;
-            if (doc->area != NULL) gtk_widget_queue_draw(doc->area);
+            /* LibreOffice may not send INVALIDATE_TILES: the text around
+             * the cursor probably changed too */
+            _doc_invalidate(doc);
         }
         break;
     case LOK_CALLBACK_CURSOR_VISIBLE:
@@ -365,7 +367,7 @@ static gboolean _doc_dispatch(gpointer data) {
         break;
     case LOK_CALLBACK_TEXT_SELECTION:
         _doc_set_selection(doc, p);
-        if (doc->area != NULL) gtk_widget_queue_draw(doc->area);
+        _doc_invalidate(doc);          /* bold, italic... on a selection */
         break;
     case LOK_CALLBACK_CELL_CURSOR:
         doc->has_cell_cursor = _doc_parse_rect(p, &doc->cell_cursor);
@@ -373,7 +375,7 @@ static gboolean _doc_dispatch(gpointer data) {
             _doc_scroll_to_cursor(doc);
             doc->follow_cursor = false;
         }
-        if (doc->area != NULL) gtk_widget_queue_draw(doc->area);
+        _doc_invalidate(doc);          /* Calc: the edited cell */
         break;
     case LOK_CALLBACK_GRAPHIC_SELECTION: {
         bool had = doc->has_graphic;
@@ -384,6 +386,8 @@ static gboolean _doc_dispatch(gpointer data) {
     }
     case LOK_CALLBACK_STATE_CHANGED:
         _doc_state_changed(doc, p);
+        /* the only message after Delete/Backspace: the document changed */
+        _doc_invalidate(doc);
         break;
     case LOK_CALLBACK_DOCUMENT_SIZE_CHANGED:
     case LOK_CALLBACK_SET_PART:
@@ -964,5 +968,8 @@ Edit *new_edit_doc(void) {
     doc->selection = g_array_new(FALSE, FALSE, sizeof(GdkRectangle));
     doc->zoom = 1.0 / DOC_TWIPS_PER_PX;
     doc->fit_width = true;
+    /* visible until LibreOffice says otherwise: recent versions never send
+     * CURSOR_VISIBLE "true" (LOKDocView also starts with it visible) */
+    doc->cursor_visible = true;
     return &doc->base;   /* upcast */
 }

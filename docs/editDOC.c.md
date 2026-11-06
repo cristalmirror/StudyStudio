@@ -42,11 +42,23 @@ dropped instead of touching freed memory.
 | Callback | Use |
 | --- | --- |
 | `INVALIDATE_TILES` | The cached view (`tile`) is stale: repaint. |
-| `INVALIDATE_VISIBLE_CURSOR`, `CURSOR_VISIBLE` | Cursor rectangle; after typing, the view scrolls to it. |
-| `TEXT_SELECTION`, `CELL_CURSOR`, `GRAPHIC_SELECTION` | Selection overlay, active cell, selected image/shape; `has_selection`. |
-| `STATE_CHANGED` | `.uno:Undo` / `.uno:Redo` availability and `.uno:StateTableCell` (cursor in a Writer table). |
+| `INVALIDATE_VISIBLE_CURSOR` | Cursor rectangle; after typing, the view scrolls to it. Also repaints (see below). |
+| `CURSOR_VISIBLE` | Hides/shows the cursor. `cursor_visible` starts `true`. |
+| `TEXT_SELECTION`, `CELL_CURSOR`, `GRAPHIC_SELECTION` | Selection overlay, active cell, selected image/shape; `has_selection`. The first two also repaint. |
+| `STATE_CHANGED` | `.uno:Undo` / `.uno:Redo` availability and `.uno:StateTableCell` (cursor in a Writer table). Also repaints. |
 | `DOCUMENT_SIZE_CHANGED`, `SET_PART` | Re-read size and the sheet/slide list. |
 | `WINDOW` | A dialog LibreOffice opened (see below). |
+
+**Repainting without `INVALIDATE_TILES`.** LibreOffice 26.8 (desktop LOK)
+never sends `INVALIDATE_TILES` after an edit, nor `CURSOR_VISIBLE "true"`:
+typing only moves the cursor, Delete/Backspace only send `STATE_CHANGED`.
+`paintTile` does return the new content, so the cursor, text selection,
+active cell and state callbacks also mark `tile` as stale
+(`_doc_invalidate`). It is cheap: it only sets a flag and queues a draw, and
+GTK merges every queued draw of a frame into one `_doc_draw`, so a burst of
+~150 `STATE_CHANGED` messages costs a single `paintTile` of the visible area.
+For the same reason `cursor_visible` starts `true` (as in LibreOffice's own
+`LOKDocView`); only `CURSOR_VISIBLE "false"` hides it.
 
 **Dialogs.** LibreOffice cannot show its dialogs inside StudyStudio and a
 pending modal dialog blocks the document. Calc's "Merge Cells" question is
@@ -60,7 +72,8 @@ any other dialog is closed and the user is told the action was cancelled.
   and two scrollbars (hidden when everything fits). No `GtkScrolledWindow`:
   the area is only as large as the visible space.
 - `_doc_draw` keeps the last `paintTile` result in `tile` and only asks
-  LibreOffice again when invalidated, scrolled, zoomed or resized; cursor and
+  LibreOffice again when invalidated (see "Repainting without
+  `INVALIDATE_TILES`"), scrolled, zoomed or resized; cursor and
   selections are painted on top. Text and slides start fit-to-width; sheets
   at 100 % (15 twips per pixel). Ctrl + wheel zooms.
 - Keyboard: a `GtkEventControllerKey` with a `GtkIMMulticontext`. Text
