@@ -3,5 +3,6 @@
 <gresources>
   <gresource prefix="/org/studystudio">
     <file>interface.ui</file>
+    <file>style.css</file>
   </gresource>
 </gresources>

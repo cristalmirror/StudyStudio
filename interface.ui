@@ -4,40 +4,91 @@
   <requires lib="gtk" version="4.0"/>
   <object class="GtkApplicationWindow" id="main_window">
     <property name="title">StudyStudio-0.1.3</property>
-    <property name="default-width">900</property>
-    <property name="default-height">700</property>
-    <child>
-      <object class="GtkBox" id="main_box">
-        <property name="orientation">vertical</property>
-        <property name="spacing">10</property>
-        <property name="margin-start">10</property>
-        <property name="margin-end">10</property>
-        <property name="margin-top">10</property>
-        <property name="margin-bottom">10</property>
-        <child>
-          <object class="GtkBox" id="buttons_box">
-            <property name="orientation">horizontal</property>
-            <property name="spacing">10</property>
-            <property name="homogeneous">true</property>
+    <property name="default-width">1100</property>
+    <property name="default-height">760</property>
+    <child type="titlebar">
+      <object class="GtkHeaderBar" id="header_bar">
+        <style>
+          <class name="app-header"/>
+        </style>
+        <child type="start">
+          <object class="GtkButton" id="add_button">
+            <property name="tooltip-text">Crear una materia nueva</property>
+            <style>
+              <class name="suggested-action"/>
+            </style>
             <child>
-              <object class="GtkButton" id="add_button">
-                <property name="label">➕ Agregar Elemento</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkButton" id="load_button">
-                <property name="label">📂 Cargar Materia</property>
+              <object class="GtkBox">
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="icon-name">list-add-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">Nueva materia</property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>
         </child>
+        <child type="start">
+          <object class="GtkButton" id="load_button">
+            <property name="tooltip-text">Cargar una materia archivada (.xz)</property>
+            <child>
+              <object class="GtkBox">
+                <property name="spacing">6</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="icon-name">document-open-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">Cargar materia</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="title-widget">
+          <object class="GtkLabel">
+            <property name="label">StudyStudio</property>
+            <style>
+              <class name="title"/>
+            </style>
+          </object>
+        </property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkBox" id="main_box">
+        <property name="orientation">vertical</property>
         <child>
           <object class="GtkScrolledWindow" id="scrolled_window">
             <property name="vexpand">true</property>
+            <property name="hscrollbar-policy">never</property>
             <child>
               <object class="GtkBox" id="target_box">
                 <property name="orientation">vertical</property>
-                <property name="spacing">5</property>
+                <property name="spacing">12</property>
+                <style>
+                  <class name="subject-list"/>
+                </style>
+                <child>
+                  <object class="GtkLabel" id="empty_hint">
+                    <property name="label">Crea una materia con «Nueva materia» para empezar a estudiar.</property>
+                    <property name="wrap">true</property>
+                    <property name="vexpand">true</property>
+                    <property name="valign">center</property>
+                    <style>
+                      <class name="empty-hint"/>
+                    </style>
+                  </object>
+                </child>
               </object>
             </child>
           </object>
@@ -45,12 +96,18 @@
         <child>
           <object class="GtkBox" id="footer">
             <property name="orientation">horizontal</property>
+            <style>
+              <class name="footer"/>
+            </style>
             <child>
               <object class="GtkLabel" id="footer_label">
                 <property name="label">Listo</property>
                 <property name="xalign">0</property>
                 <property name="ellipsize">end</property>
                 <property name="hexpand">true</property>
+                <accessibility>
+                  <property name="label">Mensajes de estado</property>
+                </accessibility>
               </object>
             </child>
           </object>
