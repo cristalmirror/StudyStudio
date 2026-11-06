@@ -1,6 +1,6 @@
 # `include/edit.h` and `src/edit.c`
 
-Status: draft for user approval; version 0.1.2.
+Status: draft for user approval; version 0.1.4 (capabilities added 2026-11-06).
 
 ## Purpose and dependencies
 
@@ -18,7 +18,8 @@ safely. The constructor of each subclass:
 
 1. allocates the subclass with `calloc` (every pointer starts as `NULL`),
 2. calls `edit_init(&obj->base)`,
-3. assigns its own `open`, `save`, `render` and `finalize`,
+3. assigns its own `open`, `save_to`, `render` and `finalize` (and the
+   capability tables it supports),
 4. returns `&obj->base`.
 
 | Member | Kind | Description |
@@ -26,11 +27,44 @@ safely. The constructor of each subclass:
 | `path` | field | Owned copy of the file path; replaced through `set_path`. |
 | `modified` | field | `true` while there are unsaved changes. |
 | `widget` | field | Root widget created by `render`; `NULL` until then. |
-| `open`, `save`, `render`, `finalize` | abstract | `NULL` after `edit_init`; each subclass must assign them. `finalize` frees only what the subclass added (virtual destructor). |
-| `close` | common | Shared destructor: drops the weak pointer (`set_widget(NULL)`, it must go before `free(self)` or GObject would later write into freed memory), removes the widget from its parent `GtkBox`, calls `finalize`, frees `path` and the object. |
-| `is_modified`, `mark_modified` | common | Read and write `modified`. |
+| `history`, `clipboard`, `markup`, `insert`, `combine` | capabilities | Pointers to the [capability contracts](#capability-contracts) the editor supports; `NULL` when it does not. |
+| `listener`, `listener_data` | field | Observer set with `set_listener`; `NULL` when nobody listens. |
+| `open`, `save_to`, `render`, `finalize` | abstract | `NULL` after `edit_init`; each subclass must assign them. `save_to(path)` writes the document to `path` without adopting it. `finalize` frees only what the subclass added (virtual destructor). |
+| `focus`, `set_color` | optional | `NULL` unless the subclass assigns them: give the keyboard focus to the editing widget; receive the color of interactive tools (PDF). |
+| `save` | common | `save_to(path)`; on success clears `modified`. `EDIT_ERR_INVALID` without a path. |
+| `save_as` | common | `save_to(new_path)`, then adopts the path and clears `modified`. On failure the old path is kept. |
+| `close` | common | Shared destructor: forgets the listener, drops the weak pointer (`set_widget(NULL)`, it must go before `free(self)` or GObject would later write into freed memory), removes the widget from its parent `GtkBox`, calls `finalize`, frees `path` and the object. |
+| `is_modified`, `mark_modified` | common | Read and write `modified`; a change notifies the listener. |
 | `set_path` | common | Replaces `path` with a copy; safe when the argument is `self->path`. |
 | `set_widget` | common | Sets `widget` as a **weak pointer** (`g_object_add_weak_pointer`): if GTK destroys the widget first (e.g. the window closes), GObject writes `NULL` into `self->widget`. Every `render` must store its root widget through it. Passing `NULL` removes the weak pointer. |
+| `set_listener`, `notify` | common | Observer: subclasses call `notify(self, message)` when the selection, undo availability or modified flag change (`message == NULL`) or to explain something to the user. |
+
+## Capability contracts
+
+Since 2026-11-06 the editing tools are split into small contracts
+(interface segregation): an editor points to the ones its backend really
+supports and leaves the rest `NULL`. Inside a contract, a `NULL` function
+means that single operation does not apply to the open format (e.g.
+`EditMarkup.shade` for Markdown). The toolbar ([docToolbar.c](docToolbar.c.md))
+shows only what is not `NULL`, so no editor fakes an operation. Some editors
+choose their tables in `open`, once the format is known (`EditDOC` picks
+Writer, Calc or Impress tables; `EditTXT` adds Markdown tables for `.md`).
+
+| Contract | Operations | Meaning |
+| --- | --- | --- |
+| `EditHistory` | `can_undo`, `can_redo`, `undo`, `redo` | The backend's own history (no parallel stacks). |
+| `EditClipboard` | `has_selection`, `copy`, `cut`, `paste(plain_text)` | System clipboard (`GdkClipboard`). `cut`/`paste` are `NULL` for read-only content (PDF). |
+| `EditMarkup` | `highlight(color)`, `shade(color)`, `clear` | Persistent colour stored in the document: `highlight` colours the text, `shade` the block around it (paragraph, cell, shape, PDF area); `clear` removes both. A temporary selection is not markup. |
+| `EditInsert` | `image`, `table`, `row`, `column`, `page` (+ `page_label`), `annotation` | New elements at the cursor. |
+| `EditCombine` | `merge_file` (+ `suffixes`), `merge_cells`, `split_cells`, `move_page` | Joining or reorganising content; each format gives these its own meaning. |
+
+Every operation returns an `EditResult`: `EDIT_OK` (0) or a negative code
+(`EDIT_ERR_UNSUPPORTED`, `_NO_SELECTION`, `_IO`, `_BACKEND`, `_INVALID`).
+`edit_result_message()` gives a short text for the status bar; an editor
+that knows a more precise reason sends it through `notify` first.
+
+Helpers: `edit_color_rgb()` converts a `GdkRGBA` to `0xRRGGBB`;
+`edit_path_has_suffix()` checks a path against a suffix list.
 
 ## Factory
 
@@ -42,6 +76,7 @@ helper `_suffix_in()`:
 | --- | --- | --- |
 | `edit_txt_suffixes` | `txt`, `md` | `EditTXT` ([editTXT.c](editTXT.c.md)) |
 | `edit_doc_suffixes` | `docx`, `doc`, `odt`, `rtf`, `xlsx`, `xls`, `ods`, `pptx`, `ppt`, `odp` | `EditDOC` ([editDOC.c](editDOC.c.md)), only if `edit_doc_available()` returns `true` |
+| `edit_pdf_suffixes` | `pdf` | `EditPDF` ([editPDF.c](editPDF.c.md)) |
 | — | anything else | `NULL` |
 
 It then calls `open()`. If opening fails, the editor is destroyed with

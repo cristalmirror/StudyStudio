@@ -4,7 +4,7 @@ FROM fedora:40
 # Avoid interactive prompts and clean the cache to reduce image size
 RUN dnf install -y \
     # --- Basic tools ---
-    gcc gcc-c++ make git \
+    gcc gcc-c++ make git python3 \
     # --- Compression and packaging libraries for Linux ---
     xz-devel libarchive-devel \
     # --- GTK4 libraries for Linux ---

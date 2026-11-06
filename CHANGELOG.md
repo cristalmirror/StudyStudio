@@ -9,7 +9,197 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+
+- Add `GtkListView` / `GtkColumnView` for high-performance lists
+- Support for modal dialogs and secondary windows
+- Extend the GLib tests to subjects (`subject.c`) and the UI dialogs
+- Internal API documentation
+- Complete functional testing for both Linux and Windows builds
+- User documentation and `README.md` improvements
+
+## [0.1.4] - 2026-11-06
+
+### Added
+
+- Editing capability contracts in `include/edit.h`: `EditHistory`,
+  `EditClipboard`, `EditMarkup`, `EditInsert`, `EditCombine`. Each editor
+  points to the tables its backend supports (`NULL` otherwise), every
+  operation returns an `EditResult`, and an `EditListener` observer reports
+  state changes and messages. New common `save` / `save_as` on top of the
+  abstract `save_to` (see `docs/edit.c.md`).
+- `EditTXT`: native `GtkTextBuffer` undo/redo, system clipboard, "insert
+  another file"; for Markdown, persistent highlight (`<mark>` with color),
+  clear, pipe tables, rows, columns, images and comments.
+- `EditDOC` is now an editor: keyboard input through a GTK input method
+  (accents, compose), LibreOffice key codes with modifiers, mouse
+  click/drag selection, drawn cursor/selection/active cell, cached
+  rendering, zoom (Ctrl + wheel), sheet/slide selector, and LibreOffice
+  callbacks marshalled to the GTK thread. `editDOCOps.c` maps the tools to
+  UNO commands per application (Writer, Calc, Impress), including
+  clipboard as HTML + text, highlight and shading, images, tables,
+  rows/columns, page breaks, new slides, comments, inserting documents,
+  merging/splitting cells (Calc's merge dialog is answered) and moving
+  slides. Unexpected LibreOffice dialogs are closed instead of blocking.
+- `EditPDF`: select tool, text copy, highlight / shade / clear with the
+  chosen color, note at the selection, whole-file snapshot undo/redo,
+  current page indicator.
+- `include/msc/pdfPages.h`, `src/msc/pdfPages.c`: insert the pages of another
+  PDF and move pages with qpdf, loaded at run time through GModule
+  (`STUDYSTUDIO_QPDF_PATH` or the usual library names); hidden when missing.
+- `include/msc/docToolbar.h`, `src/msc/docToolbar.c`: contextual toolbar with
+  one `GAction` per tool, shown or hidden from the editor's capabilities,
+  color picker, Insert and Combine menus, and Ctrl+S / Ctrl+Shift+S /
+  Ctrl+C/X/V / Ctrl+Z/Y shortcuts.
+- `style.css` (embedded resource): theme-color based styles for light and
+  dark themes; header bar, subject cards, empty-state hint, document status
+  line ("● Sin guardar" / "✓ Guardado") and a loading spinner.
+- Save As, a Save / Discard / Cancel question before closing a modified
+  document, and before closing the window with unsaved documents.
+- `tests/` with GLib tests for the three editors and `make tests` /
+  `make check` (see `docs/tests.md`).
+- Docs: `docToolbar.c.md`, `pdfPages.c.md`, `tests.md`.
+
+### Changed
+
+- Bumped the project version to `0.1.4`: `Makefile`'s `VERSION`, the window
+  title in `interface.ui`, `resources.xml` and `style.css` notes, the
+  `Version` / `Last edited` fields of every source header, `README.md`,
+  `CLAUDE.md` and the version / binary names across `docs/*.md`.
+- `Edit.save` is no longer abstract: subclasses implement `save_to(path)`.
+- `EditDOC.save_to` writes a temporary copy next to the file and renames it
+  over the original (falls back to saving in place if the rename fails).
+- `interface.ui`: `GtkHeaderBar` with "Nueva materia" / "Cargar materia",
+  larger default size, empty-state hint, styled footer.
+- Makefile: `-MMD -MP` header dependency tracking, `gmodule-2.0`, resources
+  depend on `style.css`, `tests` and `check` targets.
+
+### Fixed
+
+- `EditPDF` erase compared annotation positions (PDF coordinates, bottom-left
+  origin) with top-left coordinates, so it only hit annotations near the
+  middle of the page.
+- Changing a header did not rebuild the objects using it (no dependency
+  tracking), which could link `main.o` with an outdated `struct Edit`.
+- `EditDOC`: GTK could deliver focus/draw events to the canvas after the
+  editor was freed; `finalize` now disconnects them.
+
+### Validation
+
+- `make linux win64 tests` build without warnings in `mi_app_builder`
+  (Fedora 40) apart from the existing `subject.c:799` unused parameter.
+- 13/13 tests pass on the developer's Debian host (GTK 4.24.1, Poppler
+  26.07, LibreOffice 26.8.2, libqpdf 30) under Broadway, also when built
+  with AddressSanitizer (no invalid accesses; only fontconfig cache leaks).
+- Screenshots of the real window (Markdown, PDF, Writer, Calc) were checked.
+
 ### Known Issues
+
+- Not run on Windows. qpdf is not packaged for Windows (no `mingw64-qpdf` in
+  Fedora 40): PDF page operations stay hidden there unless its DLL is added.
+- LibreOfficeKit features that need a dialog are not offered: comments and
+  "insert slides from file" in Impress, "split cells" in Writer.
+- Copying a selected image/shape from an office document copies no image.
+- Markdown highlight shows as `<mark>` tags in the editor (no preview).
+- PDF page rotation is ignored by annotation coordinates; undo snapshots
+  save the whole file per change.
+- The first office document still blocks the UI while LibreOffice starts.
+
+## [0.1.3] - 2026-10-25
+
+### Added
+
+- `make win64-package` and CI artifacts containing the Windows executable,
+  MinGW runtime DLLs (including Poppler dependencies), GTK data and notices.
+- Windows runtime checklist in `docs/windows.md`.
+- `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c`: `SubjectDialog`,
+  the modal "Nueva materia" window (a `GtkWindow`, since `GtkDialog` is
+  deprecated in GTK 4.10). Asks for the subject name, its location (default
+  `~/StudyStudio`, changeable with an asynchronous folder chooser) and one
+  check per `EditKind`; validates that the name is not empty and that at
+  least one kind is ticked, and reports the result through a
+  `SubjectDialogDone` callback that decides whether the window closes (see
+  `docs/subjectDialog.c.md`).
+- `Subject.make_subject(self, base_dir, name, folders)` (`_make_subject` in
+  `src/subject.c`): creates `<base_dir>/<name>/` plus one subfolder per entry
+  of the NULL-terminated `folders`, refuses invalid names and existing
+  subjects, and stores the owned `Subject.name` / `Subject.dir`. Folders are
+  created with `mkdir` on Linux and `CreateDirectoryW` (UTF-8 → UTF-16) on
+  Windows, so accented names work.
+- `docs/subjectDialog.c.md`.
+
+### Changed
+
+- Documented Docker packaging commands, ZIP creation, non-root packaging fixes
+  and the distinction between packaging checks and pending Windows runtime checks.
+- `src/main.c`: the "Materia Num #x" button starts without a popover and
+  opens `SubjectDialog` through `gtk_menu_button_set_create_popup_func`.
+  Once the subject is created, `subject_panel_set_subject` renames the button
+  after the subject and gives it the edit menu. `SubjectPanel` gains
+  `number` and the owned `subject`; the file dialog of a kind starts in the
+  subject's folder for that kind.
+- `new_menu_edit_kind(on_chosen, user_data, enabled)`: the new `enabled`
+  array hides the kinds a subject does not use (`NULL` shows them all).
+- `_close_subject` frees `name` and `dir`; `new_subject` sets them to `NULL`.
+- Bumped the project version to `0.1.3`: `Makefile`'s `NAME`, the window
+  title in `interface.ui`, the version badge and early-development banner in
+  `README.md`, the `Version` field of every file header, the "Status" /
+  baseline version lines and binary names across `docs/*.md`, and the commit
+  example in `CLAUDE.md`.
+- Centralized the Makefile version in `VERSION`, with binary and package names
+  derived from it; aligned both XML resources with the release version.
+
+### Fixed
+
+- Windows packaging copies only application configuration from `etc`, avoiding
+  the restricted MinGW `etc/pki/CA` directory. Packages are assembled in a
+  temporary directory so a failed copy does not leave a partial destination.
+  The broken Fedora 40 MinGW GLib license link is resolved using the same LGPL
+  text installed by native GLib in the builder.
+- Windows subject save/load now uses UTF-8-aware file operations, wide directory
+  enumeration and UTF-8 canonical paths. Extraction checks path truncation,
+  relative entry names and content-size overflow.
+- LibreOffice DLL loading uses UTF-16 and searches for dependencies beside the
+  loaded DLL; configured relative installation paths are made absolute.
+- `src/subject.c` (Linux `_load_subject`): invalid input larger than 64 KiB
+  looped forever (and froze the window), because the decode loop called
+  `lzma_code` again after an error. Both platforms now stop at the first
+  result other than `LZMA_OK` and only accept `LZMA_STREAM_END`. A truncated
+  file returns the new code `-10` (`LZMA_BUF_ERROR`) instead of `-8`; the
+  Windows loop lost its "safety cutoff", which ended with `LZMA_OK` and
+  reported `unknown lzma error (0)`. Also `uint8_t *acc = NULL` (was
+  `LZMA_RUN`) and the doubled `new_cap = new_cap =` assignment.
+- `src/subject.c` (`_load_subject`, both platforms): when extraction failed
+  (`-9`) the decoded buffer was already handed to the caller, which only
+  frees it on `0`, so it leaked. `*out_buf`/`*out_size` are now assigned only
+  on success, and the loader frees its buffer on every error.
+- Linux: a load whose `tar -xf` was missing or exited early killed the whole
+  application with `SIGPIPE`. `main()` ignores `SIGPIPE`; the `tar` children
+  of `_unpack_tar_buffer` and `_save_subject` restore `SIG_DFL`.
+  `_unpack_tar_buffer` returns `-1` instead of calling `fatal()` on
+  `pipe`/`fork` errors, uses `_exit` in the child, and always reaps the
+  child with `waitpid` (retrying `EINTR`), also after a failed `write`.
+- `src/main.c`: `AppState` leaked. It is now tied to the window
+  (`app_state_free`), and gets a `GCancellable` given to every
+  `GtkFileDialog`; `on_window_destroy` cancels it and unregisters the footer
+  logger (`subject_set_logger(NULL, NULL)`). `on_load_dialog_finish` ignores
+  `G_IO_ERROR_CANCELLED`.
+- LibreOffice crashed (SIGSEGV in `desktop_LOKClipboard`, `Unspecified
+  Application Error`) inside `exit()` after an office document was opened.
+  Workaround: new `edit_doc_started()`; if it is true, `main()` leaves with
+  `_Exit(status)`, skipping LibreOffice's static destructors (it leaves its
+  temporary profile behind). Pending: try `office->destroy()` instead.
+
+### Validation
+
+- Rebuilt the Fedora Docker image and successfully packaged the existing
+  Windows executable with 137 DLLs. The ZIP passed an integrity check.
+- Verified cleanup after a simulated packaging copy failure.
+- Packaging and ZIP integrity checks do not establish application runtime
+  behavior. Windows application runtime checks remain pending.
+
+### Known Issues
+
 - `EditPDF` has only been compiled, not run. Pending runtime checks:
   annotations created with Poppler on real PDFs (highlight quads),
   saving over the opened file (on Windows too) and the Poppler DLLs, which
@@ -19,15 +209,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Fedora 40) has no ink annotations nor border width.
 - `EditDOC` is view-only (no keyboard/mouse input yet), targets Writer
   rendering, and has only been compiled, not run. Pending runtime checks:
-  clean exit without `office->destroy()` (it crashed in the spike),
+  the `_Exit` exit workaround and whether `office->destroy()` can replace it,
   `saveAs` over the opened file, and LibreOffice on Windows.
 - The subject menu (`MenuEditKind`) has not been run yet (built for Linux
   and Windows only).
   Closing a document with unsaved changes is refused with a footer message;
   there is no Save/Discard dialog. The first office document blocks the UI
   while LibreOffice starts.
-- `src/subject.c`: `_make_subject` is empty, has no prototype in
-  `subject.h`, and is not wired into `struct Subject`/`new_subject`.
+- The "Nueva materia" dialog (`SubjectDialog`) and `make_subject` have only
+  been compiled, not run. Pending runtime checks: the subject button must not
+  stay pressed after the dialog opens (`gtk_menu_button_set_active(FALSE)`
+  in `on_subject_button_activated`), the folders on disk, the "already
+  exists" error, and accented names on Windows (`CreateDirectoryW`).
+- "📂 Cargar Materia" does not create a subject panel yet: a loaded subject
+  never gets a button nor an edit menu, and `_load_subject` does not fill
+  `Subject.name`/`Subject.dir`.
+- `make_subject` does not roll back: if a subfolder cannot be created, the
+  folders already made stay on disk.
+- The subfolders reuse `EditKind.filter_name` ("Texto", "Documentos de
+  oficina", "PDF"), a UI string with spaces; renaming a filter would break
+  the folder lookup in `on_kind_chosen` for existing subjects.
 - Windows's `load_subject` extraction path (`_derive_extract_dir` +
   `_unpack_windows_buffer`) now compiles, but it has not been tested at
   runtime on Windows yet (see `docs/subject.c.md#extraction`).
@@ -40,22 +241,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   format.
 - The Windows entry format records only regular files, so empty directories
   cannot be restored.
-- `src/subject.c`: in `_unpack_windows_buffer`, the `subject_log` calls for
-  the truncated size header/content errors come after `return -1` and are
-  never reached.
 - `src/subject.c`: the footer only shows the final message of a load, because
   `load_subject` runs on the GTK main thread and the window is not redrawn
   until it returns.
-
-### Planned
-- Implement CSS custom styles for widgets
-- Add `GtkListView` / `GtkColumnView` for high-performance lists
-- Support for modal dialogs and secondary windows
-- Automated script to package Windows `.exe` with its DLLs
-- Unit tests with GLib Testing Framework
-- Internal API documentation
-- Complete functional testing for both Linux and Windows builds
-- User documentation and `README.md` improvements
 
 ## [0.1.2] - 2026-10-16
 

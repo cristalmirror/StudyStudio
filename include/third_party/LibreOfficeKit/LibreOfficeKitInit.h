@@ -46,6 +46,7 @@
         #define WIN32_LEAN_AND_MEAN
     #endif
     #include  <windows.h>
+    #include  <wchar.h>
     #define TARGET_LIB        "sofficeapp" ".dll"
     #define TARGET_MERGED_LIB "mergedlo" ".dll"
     #define SEPARATOR         '\\'
@@ -104,7 +105,22 @@ extern "C"
 #else
     static void *lok_loadlib(const char *pFN)
     {
-        return (void *) LoadLibraryA(pFN);
+        /* StudyStudio: paths from GTK are UTF-8; resolve dependencies beside
+         * the LO DLL, including installations under Program Files. */
+        int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pFN, -1, NULL, 0);
+        if (!n) return NULL;
+        wchar_t *wide = (wchar_t *) malloc((size_t)n * sizeof(wchar_t));
+        if (!wide) return NULL;
+        if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pFN, -1, wide, n))
+        {
+            free(wide);
+            return NULL;
+        }
+        HMODULE handle = LoadLibraryExW(wide, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        DWORD error = GetLastError();
+        free(wide);
+        if (!handle) SetLastError(error);
+        return (void *) handle;
     }
 
     static char *lok_dlerror(void)
@@ -131,48 +147,45 @@ extern "C"
         return FreeLibrary((HINSTANCE) Hnd);
     }
 
+    /* StudyStudio: preserve Unicode installation and existing PATH entries. */
     static void extendUnoPath(const char *pPath)
     {
-        char *sNewPath = NULL, *sEnvPath = NULL;
-        size_t size_sEnvPath = 0, buffer_size = 0;
-        DWORD cChars;
-
-        if (!pPath)
+        int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pPath, -1, NULL, 0);
+        if (!n) return;
+        DWORD old_size = GetEnvironmentVariableW(L"PATH", NULL, 0);
+        size_t capacity = 2 * (size_t)n + old_size + 32;
+        wchar_t *value = (wchar_t *) malloc(capacity * sizeof(wchar_t));
+        if (!value) return;
+        if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pPath, -1, value, n))
+        {
+            free(value);
             return;
-
-        cChars = GetEnvironmentVariableA("PATH", sEnvPath, 0);
-        if (cChars > 0)
-        {
-            sEnvPath = (char *) malloc(cChars);
-            cChars = GetEnvironmentVariableA("PATH", sEnvPath, cChars);
-            //If PATH is not set then it is no error
-            if (cChars == 0 && GetLastError() != ERROR_ENVVAR_NOT_FOUND)
-            {
-                free(sEnvPath);
-                return;
-            }
         }
-        //prepare the new PATH. Add the Ure/bin directory at the front.
-        //note also adding ';'
-        if(sEnvPath)
-            size_sEnvPath = strlen(sEnvPath);
-        buffer_size = size_sEnvPath + 2*strlen(pPath) + strlen(UNOPATH) + 4;
-        sNewPath = (char *) malloc(buffer_size);
-        sNewPath[0] = L'\0';
-        strcat_s(sNewPath, buffer_size, pPath);     // program to PATH
-        strcat_s(sNewPath, buffer_size, ";");
-        strcat_s(sNewPath, buffer_size, UNOPATH);   // UNO to PATH
-        if (size_sEnvPath > 0)
+        value[n - 1] = L';';
+        memcpy(value + n, value, ((size_t)n - 1) * sizeof(wchar_t));
+        wcscpy(value + 2 * n - 1, L"\\..\\URE\\bin;");
+        size_t offset = wcslen(value);
+        if (old_size && !GetEnvironmentVariableW(L"PATH", value + offset, old_size))
         {
-            strcat_s(sNewPath, buffer_size, ";");
-            strcat_s(sNewPath, buffer_size, sEnvPath);
+            free(value);
+            return;
         }
-
-        SetEnvironmentVariableA("PATH", sNewPath);
-
-        free(sNewPath);
-        free(sEnvPath);
+        SetEnvironmentVariableW(L"PATH", value);
+        free(value);
     }
+
+    static int lok_windows_stat(const char *path, WIN32_FILE_ATTRIBUTE_DATA *data)
+    {
+        int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
+        if (!n) return -1;
+        wchar_t *wide = (wchar_t *) malloc((size_t)n * sizeof(wchar_t));
+        if (!wide) return -1;
+        int ok = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, n)
+            && GetFileAttributesExW(wide, GetFileExInfoStandard, data);
+        free(wide);
+        return ok ? 0 : -1;
+    }
+
 #endif
 
 #if !defined(IOS)
@@ -182,14 +195,22 @@ static void *lok_dlopen( const char *install_path, char ** _imp_lib )
     void *dlhandle;
 
     size_t partial_length, imp_lib_size;
+#ifdef _WIN32
+    WIN32_FILE_ATTRIBUTE_DATA dir_st;
+#else
     struct stat dir_st;
+#endif
 
     *_imp_lib = NULL;
 
     if (!install_path)
         return NULL;
 
+#ifdef _WIN32
+    if (lok_windows_stat(install_path, &dir_st) != 0)
+#else
     if (stat(install_path, &dir_st) != 0)
+#endif
     {
         fprintf(stderr, "installation path \"%s\" does not exist\n", install_path);
         return NULL;
@@ -219,8 +240,14 @@ static void *lok_dlopen( const char *install_path, char ** _imp_lib )
         // small one-line text stub as in the --enable-mergedlib
         // case), but dlopen failed for some reason, don't try
         // TARGET_MERGED_LIB.
+#ifdef _WIN32
+        WIN32_FILE_ATTRIBUTE_DATA st;
+        if (lok_windows_stat(imp_lib, &st) == 0 &&
+            (st.nFileSizeHigh != 0 || st.nFileSizeLow > 100))
+#else
         struct stat st;
         if (stat(imp_lib, &st) == 0 && st.st_size > 100)
+#endif
         {
             char *pErrMessage = lok_dlerror();
             fprintf(stderr, "failed to open library '%s': %s\n",

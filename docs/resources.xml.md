@@ -1,12 +1,12 @@
 # `resources.xml`
 
-Status: draft for user approval; version 0.1.2.
+Status: draft for user approval; version 0.1.4.
 
 ## Purpose and integration
 
-Defines the GLib resource collection with prefix `/org/studystudio` and a single input, `interface.ui`. The resulting runtime path is `/org/studystudio/interface.ui`, which `activate` in `src/main.c` passes to `gtk_builder_new_from_resource`.
+Defines the GLib resource collection with prefix `/org/studystudio` and two inputs: `interface.ui` (runtime path `/org/studystudio/interface.ui`, passed by `activate` in `src/main.c` to `gtk_builder_new_from_resource`) and, since 2026-11-06, `style.css` (`/org/studystudio/style.css`, loaded by `load_css()`).
 
-The Makefile runs `glib-compile-resources --generate-source --target=build/resources.c resources.xml`. It declares both this manifest and `interface.ui` as prerequisites. Changing either triggers regeneration when building the resource target.
+The Makefile runs `glib-compile-resources --generate-source --target=build/resources.c resources.xml`. It declares this manifest, `interface.ui` and `style.css` as prerequisites. Changing either triggers regeneration when building the resource target.
 
 When adding resources, update this manifest and ensure the build tracks their input files as prerequisites. Changing the prefix or file name requires updating consumers of the runtime path.
 

@@ -1,8 +1,8 @@
 # StudyStudio documentation
 
-Status: draft for user approval. Baseline: source code reviewed at version 0.1.2.
+Status: draft for user approval. Baseline: source code reviewed at version 0.1.4.
 
-StudyStudio is an early-stage desktop application written in C with GTK4. Its current UI adds numbered buttons and can load a `.xz` subject archive through a file chooser, decoding it with `load_subject` and unpacking the decoded bytes into real files on disk. A footer at the bottom of the window shows the last status or error message reported by `src/subject.c` (for example `Subject loaded: ...` or `Error: could not open ...`). Archive compression exists in the source but `save_subject` is not yet connected to the UI. The Windows unpacking path compiles as of 0.0.14 but has not been tested at runtime yet (see [main.c](main.c.md) and [subject.c](subject.c.md#extraction)).
+StudyStudio is an early-stage desktop application written in C with GTK4. Its current UI adds numbered subject buttons; pressing one opens the "Nueva materia" dialog, which creates the subject's folders on disk and turns the button into a menu of editors for the chosen file kinds. It can also load a `.xz` subject archive through a file chooser, decoding it with `load_subject` and unpacking the decoded bytes into real files on disk. A footer at the bottom of the window shows the last status or error message reported by `src/subject.c` (for example `Subject loaded: ...` or `Error: could not open ...`). Archive compression exists in the source but `save_subject` is not yet connected to the UI. The Windows unpacking path compiles as of 0.0.14 but has not been tested at runtime yet (see [main.c](main.c.md) and [subject.c](subject.c.md#extraction)).
 
 ## File documentation
 
@@ -15,20 +15,26 @@ Each C source/header has its own document. UI resources and build configuration 
 | `src/subject.c` | [Subject implementation](subject.c.md) |
 | `include/edit.h`, `src/edit.c` | [Edit base class and editor factory](edit.c.md) |
 | `include/edit_subclass/editTXT.h`, `src/edit_subclass/editTXT.c` | [Plain-text editor (`EditTXT`)](editTXT.c.md) |
-| `include/edit_subclass/editDOC.h`, `src/edit_subclass/editDOC.c` | [LibreOfficeKit office editor (`EditDOC`)](editDOC.c.md) |
+| `include/edit_subclass/editDOC.h`, `editDOCOps.h`, `src/edit_subclass/editDOC.c`, `editDOCOps.c` | [LibreOfficeKit office editor (`EditDOC`)](editDOC.c.md) |
+| `include/edit_subclass/editPDF.h`, `src/edit_subclass/editPDF.c` | [PDF viewer and annotator (`EditPDF`)](editPDF.c.md) |
+| `include/msc/docToolbar.h`, `src/msc/docToolbar.c` | [Document toolbar and editing actions (`DocToolbar`)](docToolbar.c.md) |
+| `include/msc/pdfPages.h`, `src/msc/pdfPages.c` | [PDF page insertion and reordering with qpdf](pdfPages.c.md) |
+| `tests/` | [Automated tests](tests.md) |
 | `include/menu.h`, `src/menu.c`, `include/msc/menuEditKind.h`, `src/msc/menuEditKind.c` | [Menu base class and the subject menu (`MenuEditKind`)](menu.c.md) |
+| `include/msc/subjectDialog.h`, `src/msc/subjectDialog.c` | ["Nueva materia" dialog (`SubjectDialog`)](subjectDialog.c.md) |
 | `include/third_party/LibreOfficeKit/` | Vendored, patched LibreOfficeKit headers (see [editDOC.c](editDOC.c.md#vendored-headers)) |
 | — | [Class diagram](class_diagram.md) |
-| `resources.c` | [Generated resource source](resources.c.md) |
-| `interface.ui` | [GTK interface definition](interface.ui.md) |
+| `build/resources.c` (generated) | [Generated resource source](resources.c.md) |
+| `interface.ui`, `style.css` | [GTK interface definition and styles](interface.ui.md) |
 | `resources.xml` | [Resource manifest](resources.xml.md) |
 | `Makefile` | [Build rules](Makefile.md) |
 | `Dockerfile` | [Build environment](Dockerfile.md) |
+| `scripts/package-windows.py` | [Windows packaging, ZIP creation and runtime checks](windows.md) |
 | `.github/workflows/build.yml` | [Continuous integration workflow](build.yml.md) |
 
 ## Development direction: SOLID
 
-**From this point onward, new development and refactoring must follow SOLID principles.** This is the project's agreed development direction, not a claim that version 0.1.2 already satisfies every principle. Apply these principles through C modules, opaque types, and small operation tables where substitution is useful; a different language or a class hierarchy is not required.
+**From this point onward, new development and refactoring must follow SOLID principles.** This is the project's agreed development direction, not a claim that version 0.1.4 already satisfies every principle. Apply these principles through C modules, opaque types, and small operation tables where substitution is useful; a different language or a class hierarchy is not required.
 
 | Principle | Project guideline |
 | --- | --- |
@@ -44,4 +50,4 @@ As relevant code changes, document ownership and error contracts, return recover
 
 ## Review scope
 
-These documents describe a static source review. No build, runtime execution, or cross-platform validation was performed as part of this documentation task. Known limitations below are observations from the source, not an exhaustive defect audit.
+These documents combine source review with the packaging checks recorded in [Windows packaging](windows.md). Docker image creation, Windows packaging and ZIP integrity were verified before the version bump. Windows application runtime validation remains pending. Known limitations below are observations from the source, not an exhaustive defect audit.

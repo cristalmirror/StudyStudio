@@ -1,0 +1,148 @@
+/*
+ * StudyStudio 0.1.4 styles (GtkCssProvider, loaded from the GResource).
+ * Colors come from the GTK theme's named colors, so light and dark themes
+ * both work; states are also marked with weight, outlines or text, never
+ * only with color.
+ */
+
+/* ---------- window ---------- */
+
+.subject-list {
+    padding: 16px;
+}
+
+.empty-hint {
+    opacity: 0.7;
+    font-size: 1.1em;
+}
+
+.footer {
+    padding: 4px 12px;
+    border-top: 1px solid @borders;
+    background-color: alpha(@theme_fg_color, 0.03);
+}
+
+.footer label {
+    font-size: 0.9em;
+}
+
+/* ---------- subject card ---------- */
+
+.subject-card {
+    padding: 10px;
+    border: 1px solid @borders;
+    border-radius: 10px;
+    background-color: @theme_base_color;
+}
+
+.subject-card > menubutton > button {
+    font-weight: bold;
+    padding: 4px 12px;
+}
+
+/* ---------- document toolbar ---------- */
+
+.doc-toolbar {
+    padding: 4px 0;
+}
+
+.doc-toolbar flowboxchild {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+}
+
+.tool-group button,
+.tool-group menubutton > button {
+    min-height: 28px;
+    padding: 2px 8px;
+}
+
+.tool-group button:disabled image,
+.tool-group button:disabled label {
+    opacity: 0.45;
+}
+
+.tool-menu {
+    padding: 6px;
+}
+
+.tool-menu button.menu-item {
+    padding: 4px 12px;
+}
+
+.tool-menu button.menu-item:hover {
+    background-color: alpha(@theme_selected_bg_color, 0.15);
+}
+
+.tool-menu spinbutton {
+    min-width: 0;
+}
+
+/* ---------- editors ---------- */
+
+.editor-surface {
+    border: 1px solid @borders;
+    border-radius: 6px;
+}
+
+textview.editor-text {
+    font-size: 11pt;
+}
+
+.pdf-surface {
+    background-color: alpha(@theme_fg_color, 0.08);
+}
+
+.pdf-page {
+    box-shadow: 0 1px 4px alpha(black, 0.35);
+}
+
+.doc-canvas:focus-visible {
+    outline: 2px solid @theme_selected_bg_color;
+    outline-offset: -2px;
+}
+
+/* editor-specific bar (PDF tools, sheets / slides, zoom) */
+.context-bar {
+    padding: 4px 6px;
+    border-bottom: 1px solid @borders;
+    background-color: alpha(@theme_fg_color, 0.04);
+}
+
+/* the active tool: underline + tint, not only a color change */
+button.tool-toggle:checked {
+    background-color: alpha(@theme_selected_bg_color, 0.25);
+    box-shadow: inset 0 -3px @theme_selected_bg_color;
+}
+
+.zoom-label {
+    min-width: 64px;
+    padding: 0 6px;
+}
+
+button:focus-visible,
+menubutton > button:focus-visible {
+    outline: 2px solid alpha(@theme_selected_bg_color, 0.8);
+    outline-offset: -2px;
+}
+
+/* ---------- document status line ---------- */
+
+.doc-status {
+    padding: 4px 4px 0 4px;
+    font-size: 0.9em;
+}
+
+.doc-status .doc-name {
+    font-weight: bold;
+}
+
+.status-modified {
+    color: @warning_color;
+    font-weight: bold;
+}
+
+.status-saved {
+    color: @success_color;
+}

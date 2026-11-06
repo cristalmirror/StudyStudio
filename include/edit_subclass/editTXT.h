@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.2
+ * Version: 0.1.4
  * License: GPLv3
- * Last edited: 2026-10-12
+ * Last edited: 2026-11-06
  */
 
 /* Plain-text document editor (.txt, .md) based on GtkTextView. */
@@ -15,7 +15,8 @@
 typedef struct {
     Edit base;               /* must be the first member */
     GtkTextBuffer *buffer;   /* document text, we own one reference */
-    gulong modified_id;      /* "modified-changed" handler id */
+    GtkWidget *view;         /* GtkTextView, owned by base.widget (NULL until render) */
+    bool markdown;           /* .md: markup, tables, images and comments apply */
 } EditTXT;
 
 /* file suffixes EditTXT opens, without the dot, NULL-terminated */
