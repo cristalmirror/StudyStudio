@@ -1,8 +1,9 @@
 # `include/edit_subclass/editPDF.h` and `src/edit_subclass/editPDF.c`
 
 Status: draft for user approval; version 0.1.4 (selection, colors, undo and
-page operations added 2026-11-06). Covered by `tests/test_edit_pdf.c` (see
-[tests](tests.md)); the mouse tools still need a manual check on a desktop.
+page operations added 2026-11-06; page widgets lifetime fixed 2026-11-18).
+Covered by `tests/test_edit_pdf.c` (see [tests](tests.md)); the mouse tools
+still need a manual check on a desktop.
 
 ## Purpose
 
@@ -44,6 +45,8 @@ Inserting and reordering pages is done by qpdf ([pdfPages.c](pdfPages.c.md)).
 `EditPDFPage` holds the `PopplerPage`, its size in points, its
 `GtkDrawingArea` and the state of a drag (start/end points and a cached
 render of the page, so a drag does not re-render the PDF on every motion).
+It also holds the page's `GtkGestureDrag` (`drag`), see
+[Page widgets lifetime](#page-widgets-lifetime).
 
 `edit_pdf_select(edit, page, area)` selects an area (what the select tool
 does); it is public so tests and future tools can use it.
@@ -89,6 +92,39 @@ worked near the vertical middle of the page.
 - `save_to` writes `<path>.saving` and renames it over the target.
 - The contextual bar holds the tool buttons, the note entry, the current
   page ("Pág. 2 / 9") and the zoom.
+
+## Page widgets lifetime
+
+The draw function and the `drag-begin` / `drag-update` / `drag-end`
+handlers of each page receive `&pdf->pages[i]` as `user_data`. GLib and GTK
+keep copies of that address, and freeing the array (or setting
+`pdf->pages = NULL`) does not clear them. Removing the editor's widget does
+not guarantee that the areas and gestures die either: any other reference
+keeps them alive. A callback that still fires then reads freed memory
+(report P1).
+
+The two pointers in `EditPDFPage` therefore have different ownership:
+
+| Field | Reference | Why |
+| --- | --- | --- |
+| `area` | Weak pointer (`g_object_add_weak_pointer`) | When GTK destroys the area it sets `view->area` to `NULL`, so the code only checks `!= NULL`. In the normal close the area is already gone when `finalize` runs (`close` removes the widget first). |
+| `drag` | One reference owned by the page (`g_object_ref`) | The gesture stays valid until we let it go, so its handlers can always be disconnected, whether or not the area is still alive. |
+
+`_pdf_unbind_page(view)` cuts every link to `view`: it disconnects the
+gesture handlers (`g_signal_handlers_disconnect_by_data`), drops the
+gesture reference, clears the draw function and removes the weak pointer.
+It must run **before** the array is freed: the weak pointer lives inside
+the array, so a weak pointer left behind would let GTK write `NULL` into
+freed memory. It is called
+
+- by `_pdf_free_pages()` for every page, first thing (`finalize` and a
+  reload with another page count);
+- by `_pdf_build_pages()` before creating each page's widgets, to drop the
+  links of a previous render.
+
+It is safe when the widgets were never built (`calloc` left both fields
+`NULL`) or GTK already destroyed the area. The page array is never moved
+(`realloc`/`memcpy`), which the weak pointer to `&view->area` requires.
 
 ## Known issues
 

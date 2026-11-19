@@ -8,7 +8,7 @@
 **Commit examinado:** `72a5cd3730bbe4a04b8055cef53cd081d874c4cc`.  
 **Plataforma:** Linux, toolchain Docker del proyecto, GTK4 y C.  
 **Herramientas:** AddressSanitizer + LeakSanitizer (ASan + LSan), Valgrind Memcheck/LeakCheck, GDB, tests GLib existentes y arneses temporales de estrés.  
-**Estado de las correcciones:** ninguna aplicada. Los fragmentos de este documento son propuestas para revisar y validar; no son fixes probados.
+**Estado de las correcciones:** P1 corregido el 18 de noviembre de 2026 (ver [Corrección aplicada](#p1-aplicada)); P2–P7 sin aplicar. Los demás fragmentos de este documento son propuestas para revisar y validar; no son fixes probados.
 
 **Se confirmaron cuatro defectos en el código de StudyStudio: dos altos y dos medios.** Para documentar todo el diagnóstico, este informe incluye además una fuga confirmada en Poppler, un warning de compilación y una aserción de Writer cuya causa sigue pendiente. Son **siete entradas de diagnóstico**, no siete defectos propios confirmados.
 
@@ -39,7 +39,7 @@ Los problemas se ordenan por prioridad de corrección. Las entradas P1–P4 son 
 - [1. Portada / Resumen ejecutivo](#resumen)
 - [2. Tabla de contenido](#contenido)
 - [3. Problemas encontrados](#problemas)
-  - [P1 · Alto · PDF: uso de memoria liberada en callbacks](#p1-pdf)
+  - [P1 · Alto · PDF: uso de memoria liberada en callbacks](#p1-pdf) — corregido
   - [P2 · Alto · Guardado `.xz`: falso éxito al fallar el cierre](#p2-cierre)
   - [P3 · Medio · Subject: fuga de descriptores en errores de guardado](#p3-pipes)
   - [P4 · Medio · DOC: pegado enriquecido con stream abierto](#p4-pegado)
@@ -63,7 +63,7 @@ Los problemas se ordenan por prioridad de corrección. Las entradas P1–P4 son 
 **Tipo:** `heap-use-after-free`; lectura y escritura inválidas tras la liberación.  
 **Archivo(s) y línea(s):** `src/edit_subclass/editPDF.c:717`, conexiones en `:903,907–910`, liberación en `:84,951`; cierre base en `src/edit.c:49,54`; asignación del array en `src/edit_subclass/editPDF.c:130`.  
 **Función(es) involucrada(s):** `_pdf_build_pages`, `_pdf_on_drag_begin`, `_pdf_free_pages`, `_pdf_finalize`, `_edit_close`, `_pdf_load`.  
-**Estado / atribución:** confirmado en StudyStudio mediante una reproducción dirigida; no se demostró ese orden de eventos mediante interacción ordinaria del usuario.
+**Estado / atribución:** confirmado en StudyStudio mediante una reproducción dirigida; no se demostró ese orden de eventos mediante interacción ordinaria del usuario. **Corregido el 2026-11-18**, ver [Corrección aplicada](#p1-aplicada); los números de línea de esta sección son los del commit examinado.
 
 ### Qué está fallando (concepto)
 
@@ -242,6 +242,26 @@ static void _pdf_unbind_page(EditPDFPage *view) {
 Integrarlo en `_pdf_free_pages()` y al reconstruir widgets: `_pdf_load():141` también reemplaza el array cuando cambia el número de páginas. Quitar la inscripción del puntero débil antes de liberar el array evita que GTK escriba después en memoria liberada. Los botones de la barra PDF también llevan callbacks con `pdf` como dato (`:859,881–882`); deben quedar cubiertos por la política de desconexión, aunque esa variante no se reprodujo por separado.
 
 Después del cambio, repetir el gesto retenido, ambos órdenes de destrucción ventana/editor y los ciclos renderizados. Conservar solo el controlador, sin el área, debe ser otro caso de verificación.
+
+<a id="p1-aplicada"></a>
+### Corrección aplicada (2026-11-18)
+
+Se aplicó la propuesta anterior con un cambio de orden: `_pdf_unbind_page()` se llama **dentro** del bucle de `_pdf_free_pages()`, como primera operación de cada página, y también al inicio de cada vuelta de `_pdf_build_pages()`.
+
+- `include/edit_subclass/editPDF.h`: `EditPDFPage.area` pasa a ser puntero débil y se añade `GtkGesture *drag`, con una referencia propia.
+- `src/edit_subclass/editPDF.c`: nueva `_pdf_unbind_page()` (desconecta los handlers del gesto, suelta su referencia, quita la función de dibujo y retira el puntero débil); `_pdf_build_pages()` registra el puntero débil y guarda `view->drag = g_object_ref(drag)` antes de `gtk_widget_add_controller()`.
+- Explicación del diseño en [`docs/editPDF.c.md`](docs/editPDF.c.md#page-widgets-lifetime).
+
+**Verificación.** El arnés original (`/audit/editor_stress.c`) se perdió con `/tmp`, así que se reconstruyó uno temporal (fuera del repositorio) con cinco modos: `retained` (referencias al área y al gesto, cierre del editor y emisión de `drag-begin`/`drag-update`/`drag-end`), `normal`, `win-first` (ventana destruida antes que el editor), `reload` (otro número de páginas mientras se muestra) y `rerender` (ventana destruida y nuevo render; comprueba que GTK dejó `area` en `NULL`). Compilado con `-g -O1 -fsanitize=address,leak -fno-omit-frame-pointer` en `studystudio-builder:latest`, con GTK en Broadway:
+
+| Código | `retained` | `normal` | `win-first` | `reload` | `rerender` |
+|---|---|---|---|---|---|
+| HEAD `ee310f5` (antes) | **heap-use-after-free** en `editPDF.c:717`, liberado en `:84` ← `_pdf_finalize:951` ← `_edit_close` (`edit.c:49`) | OK | — | — | — |
+| Con la corrección | OK | OK | OK | OK | OK |
+
+Con LeakSanitizer, el modo `normal` da el mismo perfil antes y después (493 reportes, 2121 asignaciones); ninguna fuga sale de `gtk_gesture_drag_new` ni del `g_object_ref` nuevo. Las que pasan por `_pdf_render_page` vienen de cairo/Poppler y ya estaban. `make linux debug tests` termina en 0 y `test_edit_pdf` pasa (3 ok, 1 omitido por falta de libqpdf en la imagen).
+
+**Pendiente:** no se repitió con Valgrind ni con uso interactivo en un escritorio. Los callbacks de la barra PDF que reciben `pdf` como dato (ahora `editPDF.c:877,899–900`) no cambiaron: el botón vive dentro del widget del editor, pero esa variante no se reprodujo ni se verificó.
 
 <a id="p2-cierre"></a>
 ## [ALTO] P2. Guardado `.xz`: éxito anunciado aunque falla el cierre del archivo
@@ -1105,13 +1125,13 @@ También se conservaron los intentos previos al arreglo de D-Bus/usuario y los s
 <a id="prioridades"></a>
 # 8. Orden de corrección y verificación posterior
 
-1. **P1, vida de callbacks PDF.** Desconectar antes de liberar y cubrir ambos órdenes de cierre. Exigir que el arnés de gesto retenido ya no reporte accesos inválidos, tanto con ASan como con Valgrind.
+1. **P1, vida de callbacks PDF.** Desconectar antes de liberar y cubrir ambos órdenes de cierre. Exigir que el arnés de gesto retenido ya no reporte accesos inválidos, tanto con ASan como con Valgrind. **Aplicado el 2026-11-18** y verificado con ASan + LSan; falta Valgrind (ver [Corrección aplicada](#p1-aplicada)).
 2. **P2 y P3, cleanup del guardado.** Revisarlos juntos para conservar errores, cerrar todos los recursos y recolectar al hijo. Comprobar ausencia de `Created` en `/dev/full`, FD constantes en errores repetidos y round trips normales intactos.
 3. **P4, cierre del destino de pegado.** Validar que HTML/PNG se pegan, que texto plano sigue funcionando y que cerrar el documento durante la operación no provoca callbacks a datos muertos.
 4. **P5, dependencia Poppler.** Evaluar versión/backport con el mínimo aislado; no esconder el UAF propio ni agregar un segundo unref al wrapper.
 5. **P7 y P6.** Investigar el estado asíncrono de Writer sin relajar la aserción y aclarar el contrato del parámetro reservado.
 
-Las propuestas de código incluidas no se aplicaron ni se ejecutaron como correcciones. La ejecución autorizada para esta etapa fue la escritura de `report.md`; no se reanudó el contenedor ni se volvieron a correr tests para redactarlo.
+Salvo P1, corregido después (ver [Corrección aplicada](#p1-aplicada)), las propuestas de código incluidas no se aplicaron ni se ejecutaron como correcciones. La ejecución autorizada para esta etapa fue la escritura de `report.md`; no se reanudó el contenedor ni se volvieron a correr tests para redactarlo.
 
 <a id="evidencia"></a>
 # 9. Evidencia completa y referencias
