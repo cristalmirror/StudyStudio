@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.4
  * License: GPLv3
- * Last edited: 2026-11-06
+ * Last edited: 2026-11-18
  */
 
 /*
@@ -74,10 +74,28 @@ static void _pdf_repaint(EditPDFPage *view) {
     if (view->area != NULL) gtk_widget_queue_draw(view->area);
 }
 
+/*
+ * Cuts every link GTK keeps to view (signal handlers, draw func, weak
+ * pointer), so no callback can reach view once it is freed. Safe to call
+ * when the widgets were never built or GTK already destroyed them.
+ */
+static void _pdf_unbind_page(EditPDFPage *view) {
+    if (view->drag != NULL) {
+        g_signal_handlers_disconnect_by_data(view->drag, view);
+        g_clear_object(&view->drag);   /* the last unref if area is gone */
+    }
+    if (view->area != NULL) {          /* NULL if GTK already destroyed it */
+        gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(view->area), NULL, NULL, NULL);
+        g_object_remove_weak_pointer(G_OBJECT(view->area), (gpointer *)&view->area);
+        view->area = NULL;
+    }
+}
+
 /* frees the page array; the widgets belong to pages_box, not to it */
 static void _pdf_free_pages(EditPDF *pdf) {
     for (int i = 0; i < pdf->n_pages && pdf->pages != NULL; i++) {
         EditPDFPage *view = &pdf->pages[i];
+        _pdf_unbind_page(view);        /* first: nothing may reach view after free() */
         _pdf_drop_cache(view);
         if (view->page != NULL) g_object_unref(view->page);
     }
@@ -897,7 +915,9 @@ static void _pdf_build_pages(EditPDF *pdf) {
 
     for (int i = 0; i < pdf->n_pages; i++) {
         EditPDFPage *view = &pdf->pages[i];
+        _pdf_unbind_page(view);        /* drop the links of a previous render */
         view->area = gtk_drawing_area_new();
+        g_object_add_weak_pointer(G_OBJECT(view->area), (gpointer *)&view->area);
         gtk_widget_set_halign(view->area, GTK_ALIGN_CENTER);
         gtk_widget_add_css_class(view->area, "pdf-page");
         gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(view->area), _pdf_draw, view, NULL);
@@ -907,7 +927,8 @@ static void _pdf_build_pages(EditPDF *pdf) {
         g_signal_connect(drag, "drag-begin", G_CALLBACK(_pdf_on_drag_begin), view);
         g_signal_connect(drag, "drag-update", G_CALLBACK(_pdf_on_drag_update), view);
         g_signal_connect(drag, "drag-end", G_CALLBACK(_pdf_on_drag_end), view);
-        gtk_widget_add_controller(view->area, GTK_EVENT_CONTROLLER(drag));   /* area owns it */
+        view->drag = g_object_ref(drag);   /* our reference, released by _pdf_unbind_page */
+        gtk_widget_add_controller(view->area, GTK_EVENT_CONTROLLER(drag));   /* area takes the original one */
 
         gtk_box_append(GTK_BOX(pdf->pages_box), view->area);
     }

@@ -3,7 +3,7 @@
  * Repository: https://github.com/cristalmirror/StudyStudio
  * Version: 0.1.4
  * License: GPLv3
- * Last edited: 2026-11-06
+ * Last edited: 2026-11-18
  */
 
 /* PDF editor (.pdf) backed by Poppler: view, select, annotate and save.
@@ -68,7 +68,10 @@ struct EditPDFPage {
     int index;
     PopplerPage *page;         /* we own one reference */
     double width, height;      /* page size in points */
-    GtkWidget *area;           /* GtkDrawingArea (owned by pages_box) */
+    GtkWidget *area;           /* GtkDrawingArea (owned by pages_box), weak
+                                * pointer: GTK sets it to NULL on destroy */
+    GtkGesture *drag;          /* drag controller of area, we own one reference
+                                * so its handlers can always be disconnected */
 
     /* drag in progress, in widget coordinates */
     bool dragging;
