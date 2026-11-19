@@ -131,7 +131,7 @@ classDiagram
         +save_as(const char* path) int
         +set_listener(EditListener fn, gpointer data) void
         #notify(const char* message) void
-        +close() void
+        +edit_close() void
         +is_modified() bool
         #mark_modified(bool modified) void
         #set_path(const char* path) void
