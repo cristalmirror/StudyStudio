@@ -1,6 +1,6 @@
 # `include/menu.h`, `src/menu.c` and the menu subclasses (`msc/`)
 
-Status: draft for user approval; version 0.1.4.
+Status: draft for user approval; version 0.1.5.
 
 ## Purpose and dependencies
 

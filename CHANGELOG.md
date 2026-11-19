@@ -16,14 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CURSOR_VISIBLE "true"` nor `INVALIDATE_TILES` after edits, so the cursor
   now starts visible and the cursor, selection, active cell and state
   callbacks also repaint the view (see `docs/editDOC.c.md`).
-- `EditPDF`: page callbacks could run on freed memory (report P1,
-  heap-use-after-free in `_pdf_on_drag_begin`). The page array was freed
-  while the drawing areas and drag gestures that point into it could still
-  be alive. Each `EditPDFPage` now keeps its own reference to the drag
-  gesture (`drag`) and a weak pointer to its area, and the new
-  `_pdf_unbind_page()` disconnects the handlers, clears the draw function
-  and drops both before the array is freed or the pages are rebuilt
-  (see `docs/editPDF.c.md`).
 
 ### Planned
 
@@ -33,6 +25,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal API documentation
 - Complete functional testing for both Linux and Windows builds
 - User documentation and `README.md` improvements
+
+## [0.1.5] - 2026-11-19
+
+### Fixed
+
+- `EditPDF`: page callbacks could run on freed memory (report P1,
+  heap-use-after-free in `_pdf_on_drag_begin`). The page array was freed
+  while the drawing areas and drag gestures that point into it could still
+  be alive. Each `EditPDFPage` now keeps its own reference to the drag
+  gesture (`drag`) and a weak pointer to its area, and the new
+  `_pdf_unbind_page()` disconnects the handlers, clears the draw function
+  and drops both before the array is freed or the pages are rebuilt
+  (see `docs/editPDF.c.md`).
+
+### Changed
+
+- Bumped the project version to `0.1.5`: `Makefile`'s `VERSION`, the window
+  title in `interface.ui`, `resources.xml` and `style.css` notes, the
+  `Version` / `Last edited` fields of every source header, `README.md`,
+  `CLAUDE.md` and the version / binary names across `docs/*.md`.
+  `report.md` keeps 0.1.4: it is the audit of that release.
 
 ## [0.1.4] - 2026-11-06
 

@@ -1,9 +1,9 @@
 /**
  * Developer: cristalmirror
  * Repository: https://github.com/cristalmirror/StudyStudio
- * Version: 0.1.4
+ * Version: 0.1.5
  * License: GPLv3
- * Last edited: 2026-11-06
+ * Last edited: 2026-11-19
  */
 
 /* Modal window that asks for the data of a new subject. */

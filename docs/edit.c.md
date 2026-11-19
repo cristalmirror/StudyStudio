@@ -1,6 +1,6 @@
 # `include/edit.h` and `src/edit.c`
 
-Status: draft for user approval; version 0.1.4 (capabilities added 2026-11-06).
+Status: draft for user approval; version 0.1.5 (capabilities added 2026-11-06).
 
 ## Purpose and dependencies
 

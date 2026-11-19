@@ -8,7 +8,7 @@
 **Commit examinado:** `72a5cd3730bbe4a04b8055cef53cd081d874c4cc`.  
 **Plataforma:** Linux, toolchain Docker del proyecto, GTK4 y C.  
 **Herramientas:** AddressSanitizer + LeakSanitizer (ASan + LSan), Valgrind Memcheck/LeakCheck, GDB, tests GLib existentes y arneses temporales de estrés.  
-**Estado de las correcciones:** P1 corregido el 18 de noviembre de 2026 (ver [Corrección aplicada](#p1-aplicada)); P2–P7 sin aplicar. Los demás fragmentos de este documento son propuestas para revisar y validar; no son fixes probados.
+**Estado de las correcciones:** P1 corregido el 18 de noviembre de 2026 y publicado en la versión 0.1.5 (ver [Corrección aplicada](#p1-aplicada)); P2–P7 sin aplicar. Los demás fragmentos de este documento son propuestas para revisar y validar; no son fixes probados.
 
 **Se confirmaron cuatro defectos en el código de StudyStudio: dos altos y dos medios.** Para documentar todo el diagnóstico, este informe incluye además una fuga confirmada en Poppler, un warning de compilación y una aserción de Writer cuya causa sigue pendiente. Son **siete entradas de diagnóstico**, no siete defectos propios confirmados.
 
